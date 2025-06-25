@@ -1,13 +1,12 @@
 {
   "articles": [
-    { 
+    {
       "filepath": "content/hi/the_pickwickians.md",
       "lang": "hi"
     },
-    { 
+    {
       "filepath": "content/en/the_pickwickians.md",
       "lang": "en"
-    },
-    
+    }
   ]
 }
