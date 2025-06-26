@@ -1,6 +1,10 @@
 {
   "articles": [
     {
+      "filepath": "content/hi/sample.md",
+      "lang": "en"
+    },
+    {
       "filepath": "content/hi/the_pickwickians.md",
       "lang": "hi"
     },
