@@ -1,16 +1,23 @@
 {
+  "lastModified": "2025-06-28T11:27:05.889Z",
   "articles": [
     {
       "filepath": "content/en/sample.md",
-      "lang": "en"
-    },
-    {
-      "filepath": "content/hi/the_pickwickians.md",
-      "lang": "hi"
+      "lang": "en",
+      "slug": "sample_en",
+      "title": "sample"
     },
     {
       "filepath": "content/en/the_pickwickians.md",
-      "lang": "en"
+      "lang": "en",
+      "slug": "the_pickwickians_en",
+      "title": "the pickwickians"
+    },
+    {
+      "filepath": "content/hi/the_pickwickians.md",
+      "lang": "hi",
+      "slug": "the_pickwickians_hi",
+      "title": "the pickwickians"
     }
   ]
 }
