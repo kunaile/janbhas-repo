@@ -4,8 +4,8 @@ author: प्रेमचंद
 lang: hi
 category: Short Story
 date: 7-jul-2025
-thumbnail:
-audio:
+thumbnail: https://i.scdn.co/image/ab6765630000ba8ad9f5a877c7c763347982819c
+audio: https://open.spotify.com/embed/episode/6AtNlAno9hqPi16RfC27LS
 ---
 
 दुखी चमार द्वार पर झाडू लगा रहा था और उसकी पत्नी झुरिया, घर को गोबर से लीप रही थी। दोनों अपने-अपने काम से फुर्सत पा चुके थे, तो चमारिन ने कहा,
