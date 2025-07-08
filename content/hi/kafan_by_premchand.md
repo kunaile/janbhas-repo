@@ -1,9 +1,11 @@
 ---
+title: कफ़न
 author: प्रेमचंद
-title: कफ़न - प्रेमचंद 
-read_time: 15-20 minutes
 lang: hi
 category: Short Story
+date: 7-jul-2025
+thumbnail:
+audio:
 ---
 
 # कफ़न - प्रेमचंद 
