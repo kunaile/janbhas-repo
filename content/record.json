@@ -1,6 +1,12 @@
 {
-  "lastModified": "2025-07-08T14:18:49.742Z",
+  "lastModified": "2025-07-08T16:21:10.015Z",
   "articles": [
+    {
+      "filepath": "content/hi/chief-ki-dawat.md",
+      "lang": "hi",
+      "slug": "chief-ki-dawat_hi",
+      "title": "चीफ की दावत"
+    },
     {
       "filepath": "content/hi/kafan_by_premchand.md",
       "lang": "hi",
