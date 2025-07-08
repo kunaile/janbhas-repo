@@ -1,18 +1,6 @@
 {
-  "lastModified": "2025-07-08T13:35:00.893Z",
+  "lastModified": "2025-07-08T14:18:49.742Z",
   "articles": [
-    {
-      "filepath": "content/en/sample.md",
-      "lang": "en",
-      "slug": "sample_en",
-      "title": "sample"
-    },
-    {
-      "filepath": "content/en/the_pickwickians.md",
-      "lang": "en",
-      "slug": "the_pickwickians_en",
-      "title": "the pickwickians"
-    },
     {
       "filepath": "content/hi/kafan_by_premchand.md",
       "lang": "hi",
