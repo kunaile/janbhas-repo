@@ -1,5 +1,5 @@
 {
-  "lastModified": "2025-07-08T06:41:34.674Z",
+  "lastModified": "2025-07-08T13:35:00.893Z",
   "articles": [
     {
       "filepath": "content/en/sample.md",
@@ -17,25 +17,31 @@
       "filepath": "content/hi/kafan_by_premchand.md",
       "lang": "hi",
       "slug": "kafan_by_premchand_hi",
-      "title": "Kafan - Premchand"
+      "title": "कफ़न"
+    },
+    {
+      "filepath": "content/hi/sadgati.md",
+      "lang": "hi",
+      "slug": "sadgati_hi",
+      "title": "सद्गति"
     },
     {
       "filepath": "content/hi/the_pickwickians.md",
       "lang": "hi",
       "slug": "the_pickwickians_hi",
-      "title": "पिकविक पेपर्स - पिकविकियन"
+      "title": "पिकविकियन"
     },
     {
       "filepath": "content/hi/toba_tek_singh_by_manto.md",
       "lang": "hi",
       "slug": "toba_tek_singh_by_manto_hi",
-      "title": "Toba Tek Singh"
+      "title": "टोबा टेकसिंह"
     },
     {
       "filepath": "content/hi/usne_kaha_tha.md",
       "lang": "hi",
       "slug": "usne_kaha_tha_hi",
-      "title": "Usne Kaha Tha"
+      "title": "उसने कहा था"
     }
   ]
 }
