@@ -1,6 +1,6 @@
 ---
-author: Premchand
-title: Kafan - Premchand
+author: प्रेमचंद
+title: कफ़न - प्रेमचंद 
 read_time: 15-20 minutes
 lang: hi
 category: Short Story
