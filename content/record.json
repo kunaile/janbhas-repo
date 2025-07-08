@@ -1,5 +1,5 @@
 {
-  "lastModified": "2025-06-28T11:27:05.889Z",
+  "lastModified": "2025-07-08T06:41:34.674Z",
   "articles": [
     {
       "filepath": "content/en/sample.md",
@@ -14,10 +14,28 @@
       "title": "the pickwickians"
     },
     {
+      "filepath": "content/hi/kafan_by_premchand.md",
+      "lang": "hi",
+      "slug": "kafan_by_premchand_hi",
+      "title": "Kafan - Premchand"
+    },
+    {
       "filepath": "content/hi/the_pickwickians.md",
       "lang": "hi",
       "slug": "the_pickwickians_hi",
-      "title": "the pickwickians"
+      "title": "पिकविक पेपर्स - पिकविकियन"
+    },
+    {
+      "filepath": "content/hi/toba_tek_singh_by_manto.md",
+      "lang": "hi",
+      "slug": "toba_tek_singh_by_manto_hi",
+      "title": "Toba Tek Singh"
+    },
+    {
+      "filepath": "content/hi/usne_kaha_tha.md",
+      "lang": "hi",
+      "slug": "usne_kaha_tha_hi",
+      "title": "Usne Kaha Tha"
     }
   ]
 }
