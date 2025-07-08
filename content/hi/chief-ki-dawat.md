@@ -4,8 +4,8 @@ author: भीष्म साहनी
 lang: hi
 category: Short Story
 date: 7-jul-2025
-thumbnail: 
-audio:
+thumbnail: https://i.scdn.co/image/ab6765630000ba8a71224889277f592ec1eabd41
+audio: https://open.spotify.com/embed/episode/2K3RiHboioLD1yeBeUbGuW
 ---
 
 शामनाथ और उनकी धर्मपत्नी को पसीना पोंछने की फुर्सत न थी। पत्नी ड्रेसिंग गाउन पहने, उलझे हुए बालों का जूड़ा बनाए मुँह पर फैली हुई सुर्खी और पाउडर को मले और मिस्टर शामनाथ सिगरेट पर सिगरेट फूंकते हुए चीज़ों की फेहरिस्त हाथ में थामे, एक कमरे से दूसरे कमरे में आ-जा रहे थे।
