@@ -4,7 +4,7 @@ author: प्रेमचंद
 lang: hi
 category: Short Story
 date: 7-jul-2025
-thumbnail: https://i.scdn.co/image/ab67656300005f1f60fee9a8e89ae8916706af3d
+thumbnail: https://i.scdn.co/image/ab6765630000ba8a60fee9a8e89ae8916706af3d
 audio: https://open.spotify.com/embed/episode/3Rq5baBAKCPEDcZNCUD1Dj
 ---
 
