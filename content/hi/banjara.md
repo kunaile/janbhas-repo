@@ -1,6 +1,6 @@
 ---
 title: बंजारा 
-author: भजयशंकर प्रसाद 
+author: जयशंकर प्रसाद 
 lang: hi
 category: Short Story
 date: 20-jul-2025
