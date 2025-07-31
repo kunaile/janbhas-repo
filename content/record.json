@@ -1,6 +1,6 @@
 {
-  "lastModified": "2025-07-31T19:23:19.784Z",
-  "totalArticles": 16,
+  "lastModified": "2025-07-31T19:59:21.998Z",
+  "totalArticles": 26,
   "articles": [
     {
       "title": "आँखों देखी घटना",
@@ -27,6 +27,54 @@
       "lastModified": "2025-07-31T19:15:22.735Z"
     },
     {
+      "title": "अंधेर",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/andher.md",
+      "lang": "hi",
+      "slug": "andher_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:13.878Z"
+    },
+    {
+      "title": "अनुभव",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/anubhav.md",
+      "lang": "hi",
+      "slug": "anubhav_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:13.950Z"
+    },
+    {
+      "title": "बैर का अंत",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/bair_ka_annt.md",
+      "lang": "hi",
+      "slug": "bair_ka_annt_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.013Z"
+    },
+    {
+      "title": "बलिदान",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/balidaan.md",
+      "lang": "hi",
+      "slug": "balidaan_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.067Z"
+    },
+    {
       "title": "बंजारा",
       "author": "जयशंकर प्रसाद",
       "filepath": "content/hi/banjara.md",
@@ -36,7 +84,7 @@
       "thumbnail": "",
       "audio": "",
       "date": "20-jul-2025",
-      "lastModified": "2025-07-21T16:59:42.860Z"
+      "lastModified": "2025-07-31T19:33:16.605Z"
     },
     {
       "title": "भूत",
@@ -61,6 +109,66 @@
       "audio": "",
       "date": "20-jul-2025",
       "lastModified": "2025-07-21T16:59:42.860Z"
+    },
+    {
+      "title": "चमत्कार",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/chamatkaar.md",
+      "lang": "hi",
+      "slug": "chamatkaar_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.157Z"
+    },
+    {
+      "title": "धर्मसंकट",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/dharm_sankat.md",
+      "lang": "hi",
+      "slug": "dharm_sankat_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.229Z"
+    },
+    {
+      "title": "दूसरी शादी",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/doosari_saadi.md",
+      "lang": "hi",
+      "slug": "doosari_saadi_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.328Z"
+    },
+    {
+      "title": "दुस्साहस",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/dussahas.md",
+      "lang": "hi",
+      "slug": "dussahas_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.400Z"
+    },
+    {
+      "title": "गरीब की हाय",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/gareeb_ki_haay.md",
+      "lang": "hi",
+      "slug": "gareeb_ki_haay_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.499Z"
     },
     {
       "title": "गुल्ली डंडा",
@@ -97,6 +205,18 @@
       "audio": "",
       "date": "",
       "lastModified": "2025-07-31T19:15:23.230Z"
+    },
+    {
+      "title": "ज्योति",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/jyoti.md",
+      "lang": "hi",
+      "slug": "jyoti_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:55:14.553Z"
     },
     {
       "title": "कफ़न",
