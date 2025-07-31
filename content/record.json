@@ -1,107 +1,198 @@
 {
-  "lastModified": "2025-07-21T17:03:03.266Z",
+  "lastModified": "2025-07-31T19:23:19.784Z",
+  "totalArticles": 16,
   "articles": [
     {
+      "title": "आँखों देखी घटना",
+      "author": "गोपाल राम गहमरी",
       "filepath": "content/hi/aankho_dekhi_ghatana.md",
       "lang": "hi",
       "slug": "aankho_dekhi_ghatana_hi",
-      "title": "आँखों देखी घटना"
+      "category": "Short Story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "20-jul-2025",
+      "lastModified": "2025-07-21T16:59:42.860Z"
     },
     {
-      "filepath": "content/hi/album.md",
+      "title": "आप बीती",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/aap_beeti.md",
       "lang": "hi",
-      "slug": "album_hi",
-      "title": "अलबम"
+      "slug": "aap_beeti_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:22.735Z"
     },
     {
-      "filepath": "content/hi/andhkaar.md",
-      "lang": "hi",
-      "slug": "andhkaar_hi",
-      "title": "अंधकार"
-    },
-    {
+      "title": "बंजारा",
+      "author": "जयशंकर प्रसाद",
       "filepath": "content/hi/banjara.md",
       "lang": "hi",
       "slug": "banjara_hi",
-      "title": "बंजारा"
+      "category": "Short Story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "20-jul-2025",
+      "lastModified": "2025-07-21T16:59:42.860Z"
     },
     {
+      "title": "भूत",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/bhoot.md",
+      "lang": "hi",
+      "slug": "bhoot_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:22.852Z"
+    },
+    {
+      "title": "बूढ़ी काकी",
+      "author": "प्रेमचंद",
       "filepath": "content/hi/boodhi_kaki.md",
       "lang": "hi",
       "slug": "boodhi_kaki_hi",
-      "title": "बूढ़ी काकी"
+      "category": "Short Story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "20-jul-2025",
+      "lastModified": "2025-07-21T16:59:42.860Z"
     },
     {
-      "filepath": "content/hi/chief_ki_dawat.md",
+      "title": "गुल्ली डंडा",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/gulli_danda.md",
       "lang": "hi",
-      "slug": "chief_ki_dawat_hi",
-      "title": "चीफ की दावत"
+      "slug": "gulli_danda_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.023Z"
     },
     {
-      "filepath": "content/hi/cycle_ki_swari.md",
+      "title": "ईदगाह",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/idgah.md",
       "lang": "hi",
-      "slug": "cycle_ki_swari_hi",
-      "title": "साइकिल की सवारी"
+      "slug": "idgah_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.095Z"
     },
     {
-      "filepath": "content/hi/ek_raat.md",
+      "title": "जिहाद",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/jihaad.md",
       "lang": "hi",
-      "slug": "ek_raat_hi",
-      "title": "एक रात"
+      "slug": "jihaad_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.230Z"
     },
     {
-      "filepath": "content/hi/ginni.md",
-      "lang": "hi",
-      "slug": "ginni_hi",
-      "title": "गिन्‍नी"
-    },
-    {
-      "filepath": "content/hi/kabuliwala.md",
-      "lang": "hi",
-      "slug": "kabuliwala_hi",
-      "title": "काबुलीवाला"
-    },
-    {
+      "title": "कफ़न",
+      "author": "प्रेमचंद",
       "filepath": "content/hi/kafan.md",
       "lang": "hi",
       "slug": "kafan_hi",
-      "title": "कफ़न"
+      "category": "Short Story",
+      "thumbnail": "https://i.scdn.co/image/ab6765630000ba8a60fee9a8e89ae8916706af3d",
+      "audio": "https://open.spotify.com/embed/episode/3Rq5baBAKCPEDcZNCUD1Dj",
+      "date": "7-jul-2025",
+      "lastModified": "2025-07-30T09:43:08.629Z"
     },
     {
-      "filepath": "content/hi/kavi_ka_chunav.md",
-      "lang": "hi",
-      "slug": "kavi_ka_chunav_hi",
-      "title": "कवि का चुनाव"
-    },
-    {
-      "filepath": "content/hi/sach_ka_sauda.md",
-      "lang": "hi",
-      "slug": "sach_ka_sauda_hi",
-      "title": "सच का सौदा"
-    },
-    {
+      "title": "सद्गति",
+      "author": "प्रेमचंद",
       "filepath": "content/hi/sadgati.md",
       "lang": "hi",
       "slug": "sadgati_hi",
-      "title": "सद्गति"
+      "category": "Short Story",
+      "thumbnail": "https://i.scdn.co/image/ab6765630000ba8ad9f5a877c7c763347982819c",
+      "audio": "https://open.spotify.com/embed/episode/6AtNlAno9hqPi16RfC27LS",
+      "date": "7-jul-2025",
+      "lastModified": "2025-07-08T16:20:50.232Z"
     },
     {
-      "filepath": "content/hi/the_pickwickians.md",
+      "title": "शिकारी",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/shikari.md",
       "lang": "hi",
-      "slug": "the_pickwickians_hi",
-      "title": "पिकविकियन"
+      "slug": "shikari_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.302Z"
     },
     {
+      "title": "सुभागी",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/shubhagi.md",
+      "lang": "hi",
+      "slug": "shubhagi_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.347Z"
+    },
+    {
+      "title": "ठाकुर का कुआँ",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/thakur_ka_kua.md",
+      "lang": "hi",
+      "slug": "thakur_ka_kua_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.446Z"
+    },
+    {
+      "title": "टोबा टेकसिंह",
+      "author": "मण्टो",
       "filepath": "content/hi/toba_tek_singh.md",
       "lang": "hi",
       "slug": "toba_tek_singh_hi",
-      "title": "टोबा टेकसिंह"
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "7-jul-2025",
+      "lastModified": "2025-07-30T09:43:08.629Z"
     },
     {
+      "title": "उसने कहा था",
+      "author": "चन्द्रधर शर्मा 'गुलेरी",
       "filepath": "content/hi/usne_kaha_tha.md",
       "lang": "hi",
       "slug": "usne_kaha_tha_hi",
-      "title": "उसने कहा था"
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "7-jul-2025",
+      "lastModified": "2025-07-30T09:43:08.629Z"
+    },
+    {
+      "title": "वेश्या",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/veshya.md",
+      "lang": "hi",
+      "slug": "veshya_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T19:15:23.518Z"
     }
   ]
 }
