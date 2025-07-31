@@ -1,6 +1,6 @@
 {
-  "lastModified": "2025-07-31T19:59:21.998Z",
-  "totalArticles": 26,
+  "lastModified": "2025-07-31T20:37:47.468Z",
+  "totalArticles": 35,
   "articles": [
     {
       "title": "आँखों देखी घटना",
@@ -231,6 +231,66 @@
       "lastModified": "2025-07-30T09:43:08.629Z"
     },
     {
+      "title": "कायर",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/kayar.md",
+      "lang": "hi",
+      "slug": "kayar_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:37:20.785Z"
+    },
+    {
+      "title": "मांगे की घड़ी",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/maange_ki_ghadi.md",
+      "lang": "hi",
+      "slug": "maange_ki_ghadi_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:37:20.839Z"
+    },
+    {
+      "title": "मनोवृत्ति",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/manovritti.md",
+      "lang": "hi",
+      "slug": "manovritti_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:37:20.875Z"
+    },
+    {
+      "title": "नशा",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/nasha.md",
+      "lang": "hi",
+      "slug": "nasha_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:37:20.920Z"
+    },
+    {
+      "title": "पूस",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/poos_ki_raat.md",
+      "lang": "hi",
+      "slug": "poos_ki_raat_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:37:21.001Z"
+    },
+    {
       "title": "सद्गति",
       "author": "प्रेमचंद",
       "filepath": "content/hi/sadgati.md",
@@ -241,6 +301,42 @@
       "audio": "https://open.spotify.com/embed/episode/6AtNlAno9hqPi16RfC27LS",
       "date": "7-jul-2025",
       "lastModified": "2025-07-08T16:20:50.232Z"
+    },
+    {
+      "title": "सौत",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/saut.md",
+      "lang": "hi",
+      "slug": "saut_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:10:41.572Z"
+    },
+    {
+      "title": "सवा सेर गेहूं",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/sawa_ser_gehun.md",
+      "lang": "hi",
+      "slug": "sawa_ser_gehun_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:10:41.644Z"
+    },
+    {
+      "title": "शांति",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/shanti.md",
+      "lang": "hi",
+      "slug": "shanti_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:10:41.743Z"
     },
     {
       "title": "शिकारी",
@@ -265,6 +361,18 @@
       "audio": "",
       "date": "",
       "lastModified": "2025-07-31T19:15:23.347Z"
+    },
+    {
+      "title": "स्वामिनी",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/swamini.md",
+      "lang": "hi",
+      "slug": "swamini_hi",
+      "category": "short story",
+      "thumbnail": "",
+      "audio": "",
+      "date": "",
+      "lastModified": "2025-07-31T20:10:41.797Z"
     },
     {
       "title": "ठाकुर का कुआँ",
