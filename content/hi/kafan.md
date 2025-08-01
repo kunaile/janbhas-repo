@@ -5,7 +5,7 @@ lang: hi
 category: Short Story
 date: 7-jul-2025
 thumbnail: https://i.scdn.co/image/ab6765630000ba8a60fee9a8e89ae8916706af3d
-audio: https://open.spotify.com/embed/episode/3Rq5baBAKCPEDcZNCUD1Dj
+audio: https://open.spotify.com/embed/episode/1LadkKKjSXuz5h6opd3v8r
 ---
 
 झोंपड़े के द्वार पर बाप और बेटा दोनों एक बुझे हुए अलाव के सामने चुपचाप बैठे हुए हैं और अन्दर बेटे की जवान बीवी बुधिया प्रसव-वेदना से पछाड़ खा रही थी। रह-रह कर उसके मुँह से ऐसी _दिल हिला देने वाली_ आवाज निकलती थी कि दोनों कलेजा थाम लेते थे। जाड़ों की रात थी, प्रकृति सन्नाटे में डूबी हुई। सारा गाँव अंधकार में लय हो गया था। 
