@@ -33,8 +33,8 @@ const processMarkdownFile = (filePath, contentDir) => {
       lang: frontmatter.lang || lang,
       slug: slug,
       category: frontmatter.category || 'Uncategorized',
-      thumbnail: frontmatter.thumbnail || '',
-      audio: frontmatter.audio || '',
+      // thumbnail: frontmatter.thumbnail || '',
+      // audio: frontmatter.audio || '',
       date: frontmatter.date || '',
       lastModified: stats.mtime.toISOString(),
     }
