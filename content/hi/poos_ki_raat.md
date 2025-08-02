@@ -1,6 +1,6 @@
 ---
 author: प्रेमचंद
-title: पूस
+title: पूस की रात
 lang: hi
 category: short story
 date: 
