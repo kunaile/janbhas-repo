@@ -4,10 +4,10 @@ title: भोला भट्ट
 lang: hi
 category: short story
 date: 
-thumbnail: 
-audio: 
+thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1fd5398d43b0bd5e421a5f8b2c
+audio: https://open.spotify.com/embed/episode/1GgX0iHAT1ixZRJd4iHsWD
 words: 808
-duration:
+duration: 06:31
 ---
 
 एक थे भोला भट्ट। वह काशी गये और वहां पढ़कर वापस आए। शास्त्र जानते थे और कथा-वार्ता भी कहते थे। एक बार भोला भट्ट कथा कहने के लिए अपने गांव से निकले और दूर के एक गांव में पहुंचे। गांव की चौपाल में ठहरे। उन्हें आया देख गांव के पटेल इकट्ठे हुए और उनको ड्योढ़ी पर ले गए। वहां उन्होंने भटजी के रहने खाने की अच्छी व्यवस्था कर दी। सीधा-सामान भेजकर भट्टजी को अच्छा भोजन कराया।
