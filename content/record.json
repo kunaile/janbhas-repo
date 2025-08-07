@@ -1,17 +1,7 @@
 {
-  "lastModified": "2025-08-02T08:01:01.849Z",
-  "totalArticles": 35,
+  "lastModified": "2025-08-07T19:36:01.368Z",
+  "totalArticles": 37,
   "articles": [
-    {
-      "title": "आँखों देखी घटना",
-      "author": "गोपाल राम गहमरी",
-      "filepath": "content/hi/aankho_dekhi_ghatana.md",
-      "lang": "hi",
-      "slug": "aankho_dekhi_ghatana_hi",
-      "category": "Short Story",
-      "date": "20-jul-2025",
-      "lastModified": "2025-08-02T07:35:12.921Z"
-    },
     {
       "title": "आप बीती",
       "author": "प्रेमचंद",
@@ -21,6 +11,16 @@
       "category": "short story",
       "date": "",
       "lastModified": "2025-08-02T07:36:59.309Z"
+    },
+    {
+      "title": "आत्म-संगीत",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/aatm_sangeet.md",
+      "lang": "hi",
+      "slug": "aatm_sangeet_hi",
+      "category": "short story",
+      "date": "",
+      "lastModified": "2025-08-07T14:09:37.721Z"
     },
     {
       "title": "अंधेर",
@@ -70,7 +70,17 @@
       "slug": "banjara_hi",
       "category": "Short Story",
       "date": "20-jul-2025",
-      "lastModified": "2025-08-02T07:44:50.665Z"
+      "lastModified": "2025-08-07T14:07:26.610Z"
+    },
+    {
+      "title": "भोला भट्ट",
+      "author": "गिजुभाई बधेका",
+      "filepath": "content/hi/bhola_bhatt.md",
+      "lang": "hi",
+      "slug": "bhola_bhatt_hi",
+      "category": "short story",
+      "date": "",
+      "lastModified": "2025-08-07T15:54:26.722Z"
     },
     {
       "title": "भूत",
@@ -90,7 +100,7 @@
       "slug": "boodhi_kaki_hi",
       "category": "Short Story",
       "date": "20-jul-2025",
-      "lastModified": "2025-08-02T04:48:34.787Z"
+      "lastModified": "2025-08-07T14:07:32.330Z"
     },
     {
       "title": "चमत्कार",
@@ -113,16 +123,6 @@
       "lastModified": "2025-08-02T05:00:39.659Z"
     },
     {
-      "title": "दूसरी शादी",
-      "author": "प्रेमचंद",
-      "filepath": "content/hi/doosari_saadi.md",
-      "lang": "hi",
-      "slug": "doosari_saadi_hi",
-      "category": "short story",
-      "date": "",
-      "lastModified": "2025-08-02T05:02:41.727Z"
-    },
-    {
       "title": "दुस्साहस",
       "author": "प्रेमचंद",
       "filepath": "content/hi/dussahas.md",
@@ -131,6 +131,16 @@
       "category": "short story",
       "date": "",
       "lastModified": "2025-08-02T05:06:20.860Z"
+    },
+    {
+      "title": "एक ऑंच की कसर",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/ek_aanch_ki_kasar.md",
+      "lang": "hi",
+      "slug": "ek_aanch_ki_kasar_hi",
+      "category": "short story",
+      "date": "",
+      "lastModified": "2025-08-07T14:07:38.508Z"
     },
     {
       "title": "गरीब की हाय",
@@ -190,7 +200,7 @@
       "slug": "kafan_hi",
       "category": "Short Story",
       "date": "7-jul-2025",
-      "lastModified": "2025-08-02T05:44:18.440Z"
+      "lastModified": "2025-08-05T04:28:55.462Z"
     },
     {
       "title": "कायर",
@@ -233,6 +243,16 @@
       "lastModified": "2025-08-02T06:17:56.765Z"
     },
     {
+      "title": "पिताजी! कौआ",
+      "author": "गिजुभाई बधेका",
+      "filepath": "content/hi/pitaaji_kaoa.md",
+      "lang": "hi",
+      "slug": "pitaaji_kaoa_hi",
+      "category": "short story",
+      "date": "",
+      "lastModified": "2025-08-07T15:54:06.749Z"
+    },
+    {
       "title": "पूस की रात",
       "author": "प्रेमचंद",
       "filepath": "content/hi/poos_ki_raat.md",
@@ -250,7 +270,7 @@
       "slug": "sadgati_hi",
       "category": "Short Story",
       "date": "7-jul-2025",
-      "lastModified": "2025-08-02T06:37:55.736Z"
+      "lastModified": "2025-08-07T14:08:07.610Z"
     },
     {
       "title": "सौत",
@@ -320,7 +340,7 @@
       "slug": "thakur_ka_kua_hi",
       "category": "short story",
       "date": "",
-      "lastModified": "2025-08-02T07:19:21.906Z"
+      "lastModified": "2025-08-07T14:08:30.938Z"
     },
     {
       "title": "टोबा टेकसिंह",
@@ -340,7 +360,7 @@
       "slug": "usne_kaha_tha_hi",
       "category": "short story",
       "date": "7-jul-2025",
-      "lastModified": "2025-08-02T07:48:52.265Z"
+      "lastModified": "2025-08-05T03:03:40.871Z"
     },
     {
       "title": "वेश्या",
