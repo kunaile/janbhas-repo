@@ -4,8 +4,10 @@ title: आत्म-संगीत
 lang: hi
 category: short story
 date: 
-thumbnail: 
-audio:
+thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1ff8acf42b092d88a8a5a135a9
+audio: https://open.spotify.com/embed/episode/7K0F4DD6xgOFpBR9Sc6SzK
+words: 1168
+duration: 09:43
 ---
 
 आधी रात थी। नदी का किनारा था। आकाश के तारे स्थिर थे और नदी में उनका प्रतिबिम्ब लहरों के साथ चंचल। एक स्वर्गीय संगीत की मनोहर और जीवनदायिनी, प्राण-पोषिणी ध्वनियाँ इस निस्तब्ध और तमोमय दृश्य पर इस प्रकार छा रही थी, जैसे हृदय पर आशाएँ छायी रहती हैं, या मुखमंडल पर शोक।
