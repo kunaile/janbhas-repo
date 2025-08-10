@@ -3,7 +3,7 @@ name: Smart Content Sync
 on:
   push:
     branches: [main]
-    paths: ['contents/**']
+    paths: ['content/**']
 
 permissions:
   contents: read
@@ -50,8 +50,8 @@ jobs:
       - name: 🔍 Detect changes
         id: changes
         run: |
-          CHANGED_FILES=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD | grep -E '^contents/.*\.(md|mdx)$' || true)
-          REMOVED_FILES=$(git diff --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^contents/.*\.(md|mdx)$' || true)
+          CHANGED_FILES=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
+          REMOVED_FILES=$(git diff --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
           
           TOTAL_CHANGES=$(printf '%s\n%s' "$CHANGED_FILES" "$REMOVED_FILES" | grep -v '^$' | wc -l)
           echo "total-changes=$TOTAL_CHANGES" >> $GITHUB_OUTPUT
