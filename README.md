@@ -34,7 +34,7 @@ pnpm sync:manual  # Manual content sync (offline)
 ### Trigger Mechanism
 - **GitHub webhook** on push to `main` branch
 - **Endpoint**: `POST /webhook`
-- **Processes**: `contents/**/*.md` files only
+- **Processes**: `content/**/*.md` files only
 - **Manual processing**: Available via `pnpm sync:manual`
 
 ### Database Update Flow
@@ -60,7 +60,7 @@ pnpm sync:manual  # Manual content sync (offline)
 
 ### Directory Layout
 ```
-contents/
+content/
 ├── hi/
 │   └── story.md
 ├── bn/
@@ -125,7 +125,7 @@ mkdir scripts
 
 ### Usage
 ```bash
-# Process all markdown files in contents/ directory
+# Process all markdown files in content/ directory
 pnpm sync:manual
 ```
 

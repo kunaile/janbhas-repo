@@ -254,7 +254,7 @@ async function main() {
         console.log('💾 Database connected');
 
         // Find and parse all markdown files
-        const contentDir = join(process.cwd(), 'contents');
+        const contentDir = join(process.cwd(), 'content');
         const markdownFiles = findMarkdownFiles(contentDir);
 
         console.log(`📚 Found ${markdownFiles.length} markdown files`);

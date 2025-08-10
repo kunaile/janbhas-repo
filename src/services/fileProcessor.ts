@@ -88,7 +88,7 @@ export function extractCommitInfo(payload: any): CommitInfo[] {
  * Checks if a file is a markdown file we should process
  */
 function isMarkdownFile(filename: string): boolean {
-    return filename.startsWith('contents/') &&
+    return filename.startsWith('content/') &&
         (filename.endsWith('.md') || filename.endsWith('.mdx'));
 }
 
