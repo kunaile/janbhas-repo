@@ -43,7 +43,7 @@ jobs:
           echo "✅ Authorization verified"
 
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -73,7 +73,6 @@ jobs:
       - name: ✅ Validate environment
         if: steps.changes.outputs.total-changes != '0'
         run: |
-          # Check secrets without exposing values
           SECRETS_VALID=true
           
           if [ -z "${{ secrets.DATABASE_URL }}" ]; then
@@ -94,15 +93,15 @@ jobs:
 
       - name: ⚙️ Setup Node.js
         if: steps.changes.outputs.total-changes != '0'
-        uses: actions/setup-node@v4.0.1
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: 📦 Setup pnpm
         if: steps.changes.outputs.total-changes != '0'
-        uses: pnpm/action-setup@v4.0.0
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 10.5.2
 
       - name: 🗂️ Cache dependencies
         if: steps.changes.outputs.total-changes != '0'
