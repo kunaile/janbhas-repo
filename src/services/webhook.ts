@@ -4,18 +4,73 @@
  * Processes incoming webhook requests and triggers content synchronization
  */
 import { Request, Response } from 'express';
+import { createHmac } from 'crypto';
 import { extractCommitInfo, filterRelevantCommits } from './fileProcessor';
 import { processCommitChanges } from './contentProcessor';
 
 /**
+ * Verifies GitHub webhook signature for security
+ * Ensures the request actually comes from GitHub
+ */
+function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+    const expectedSignature = `sha256=${createHmac('sha256', secret)
+        .update(payload, 'utf8')
+        .digest('hex')}`;
+
+    // Use timingSafeEqual to prevent timing attacks
+    return signature.length === expectedSignature.length &&
+        createHmac('sha256', secret).update(signature).digest('hex') ===
+        createHmac('sha256', secret).update(expectedSignature).digest('hex');
+}
+
+/**
  * Main webhook handler for GitHub push events
- * Validates payload and triggers content processing pipeline
+ * REQUIRED: Webhook secret must be configured - no optional handling
  */
 export async function webhookHandler(req: Request, res: Response): Promise<void> {
     console.log('📨 Received GitHub webhook');
 
     try {
         const payload = req.body;
+        const signature = req.headers['x-hub-signature-256'] as string;
+        const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
+
+        // REQUIRED: Webhook secret must be configured
+        if (!webhookSecret) {
+            console.error('❌ GITHUB_WEBHOOK_SECRET environment variable not configured');
+            res.status(500).json({
+                success: false,
+                message: 'Webhook secret not configured on server'
+            });
+            return;
+        }
+
+        // REQUIRED: Webhook signature must be present
+        if (!signature) {
+            console.warn('❌ Webhook signature missing in request headers');
+            res.status(401).json({
+                success: false,
+                message: 'Webhook signature required'
+            });
+            return;
+        }
+
+        // REQUIRED: Signature verification must pass
+        const payloadString = JSON.stringify(payload);
+        const isValidSignature = verifyWebhookSignature(payloadString, signature, webhookSecret);
+
+        if (!isValidSignature) {
+            console.warn('❌ Invalid webhook signature detected');
+            console.warn(`   Expected signature format: sha256=...`);
+            console.warn(`   Received signature: ${signature}`);
+            res.status(401).json({
+                success: false,
+                message: 'Invalid webhook signature'
+            });
+            return;
+        }
+
+        console.log('✅ Webhook signature verified successfully');
 
         // Validate webhook payload
         if (!isValidPushEvent(payload)) {
@@ -37,7 +92,7 @@ export async function webhookHandler(req: Request, res: Response): Promise<void>
             return;
         }
 
-        console.log('🚀 Processing push to main branch...');
+        console.log('🚀 Processing verified push to main branch...');
         console.log(`📦 Repository: ${payload.repository?.full_name}`);
         console.log(`👤 Pushed by: ${payload.pusher?.name}`);
 
@@ -92,18 +147,3 @@ function isValidPushEvent(payload: any): boolean {
         payload.pusher
     );
 }
-
-/**
- * Optional: Webhook signature verification for security
- * Uncomment and configure if you want to verify webhook signatures
- */
-/*
-import { createHmac } from 'crypto';
-
-function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
-    const expectedSignature = `sha256=${createHmac('sha256', secret)
-        .update(payload)
-        .digest('hex')}`;
-    return signature === expectedSignature;
-}
-*/
