@@ -10,7 +10,8 @@
     "db:migrate": "node --env-file=.env.local -r tsx ./src/db/migrate.ts",
     "db:reset": "node --env-file=.env.local -r tsx scripts/reset-database.ts",
     "db:update-authors": "node --env-file=.env.local -r tsx scripts/update-authors.ts",
-    "sync:manual": "node --env-file=.env.local -r tsx scripts/manual-sync.ts"
+    "sync:manual": "node --env-file=.env.local -r tsx scripts/manual-sync.ts",
+    "sync:github": "node -r tsx scripts/github-sync.ts"
   },
   "keywords": [],
   "author": "",

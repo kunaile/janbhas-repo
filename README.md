@@ -1,4 +1,4 @@
-# Svarnac
+# Janbhas Repo
 
 ## Technical Setup
 
