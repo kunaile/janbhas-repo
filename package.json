@@ -1,0 +1,35 @@
+{
+  "name": "svarnac-repo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --env-file=.env.local -r ts-node/register src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --env-file=.env.local -r tsx ./src/db/migrate.ts",
+    "sync:manual": "node --env-file=.env.local -r tsx scripts/manual-sync.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.5.2",
+  "dependencies": {
+    "drizzle-orm": "^0.44.4",
+    "express": "^5.1.0",
+    "gray-matter": "^4.0.3",
+    "pg": "^8.16.3",
+    "transliteration": "^2.3.5",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.2.1",
+    "@types/pg": "^8.15.5",
+    "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.31.4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}
