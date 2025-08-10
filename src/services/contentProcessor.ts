@@ -1,4 +1,8 @@
 // src/services/contentProcessor.ts
+/**
+ * Content processing service with enhanced error handling and clean logging
+ * Handles extraction of metadata from markdown files and database operations
+ */
 import matter from 'gray-matter';
 import {
     findOrCreateAuthor,
@@ -12,24 +16,115 @@ import {
     type LanguageData,
     type ArticleData
 } from './database';
-import { transliterate, generateSlug, normalizeText, getLanguageName } from '../utils/transliteration';
+import { transliterateAuthorName, transliterate, generateSlug, normalizeText, getLanguageName } from '../utils/transliteration';
 import { getMarkdownFileContent, type FileChange, type CommitInfo } from './fileProcessor';
+
+// Clean logging utilities
+const log = {
+    info: (msg: string) => console.log(`[INFO] ${msg}`),
+    warn: (msg: string) => console.log(`[WARN] ${msg}`),
+    error: (msg: string) => console.log(`[ERROR] ${msg}`),
+    success: (msg: string) => console.log(`[OK] ${msg}`),
+    alert: (msg: string) => console.log(`[ALERT] ${msg}`)
+};
 
 /**
  * Expected frontmatter structure from markdown files
  */
 type Frontmatter = {
-    author: string;         // Local language author name
-    title: string;          // Local language title
-    category: string;       // Category name
+    author: string;          // Local language author name
+    title: string;           // Local language title
+    category: string;        // Category name
     lang: string;           // Language code
     date?: string;          // Published date
     thumbnail?: string;     // Thumbnail URL
     audio?: string;         // Audio URL
     words?: number;         // Word count
-    duration?: number;      // Duration in minutes
+    duration?: string | number; // Duration in MM:SS format or seconds
     published?: boolean;    // Publication status
 };
+
+/**
+ * Converts duration from MM:SS format to total seconds
+ * Handles various input formats gracefully
+ */
+function parseDuration(duration: string | number | undefined): number | null {
+    if (!duration) return null;
+
+    if (typeof duration === 'number') return duration;
+
+    const durationStr = duration.toString().trim();
+
+    // Handle MM:SS format (e.g., "09:43")
+    if (durationStr.includes(':')) {
+        const parts = durationStr.split(':');
+        if (parts.length === 2) {
+            const minutes = parseInt(parts[0], 10);
+            const seconds = parseInt(parts[1], 10);
+            if (!isNaN(minutes) && !isNaN(seconds)) {
+                return minutes * 60 + seconds;
+            }
+        }
+        // Handle HH:MM:SS format (e.g., "1:09:43")
+        if (parts.length === 3) {
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            const seconds = parseInt(parts[2], 10);
+            if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+                return hours * 3600 + minutes * 60 + seconds;
+            }
+        }
+    }
+
+    // Handle plain number string
+    const parsed = parseInt(durationStr.replace(/[^\d]/g, ''), 10);
+    return isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Extracts a short description from markdown content
+ * Uses first paragraph or falls back to first 150 characters
+ */
+function extractShortDescription(markdownContent: string): string {
+    if (!markdownContent) return '';
+
+    // Remove markdown headers and formatting
+    const lines = markdownContent
+        .replace(/^#+\s+/gm, '')        // Remove headers
+        .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
+        .replace(/\*(.*?)\*/g, '$1')     // Remove italic formatting
+        .replace(/`(.*?)`/g, '$1')       // Remove code formatting
+        .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links, keep text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+    const firstParagraph = lines[0] || '';
+
+    // Limit to 150 characters
+    if (firstParagraph.length <= 150) {
+        return firstParagraph;
+    }
+
+    return firstParagraph.substring(0, 147) + '...';
+}
+
+/**
+ * Validates required frontmatter fields
+ * Returns array of missing field names
+ */
+function validateFrontmatter(fm: Frontmatter): string[] {
+    const required = ['author', 'title', 'lang', 'category'];
+    const missing: string[] = []; // FIX: Explicitly type as string[]
+
+    for (const field of required) {
+        if (!fm[field as keyof Frontmatter]) {
+            missing.push(field);
+        }
+    }
+
+    return missing;
+}
 
 /**
  * Processes a single markdown file and updates the database
@@ -37,9 +132,11 @@ type Frontmatter = {
  */
 export async function processMarkdownFile(filename: string): Promise<boolean> {
     try {
+        log.info(`Processing: ${filename}`);
+
         const fileContent = getMarkdownFileContent(filename);
         if (!fileContent) {
-            console.error(`❌ Could not read file: ${filename}`);
+            log.error(`Could not read file: ${filename}`);
             return false;
         }
 
@@ -48,26 +145,26 @@ export async function processMarkdownFile(filename: string): Promise<boolean> {
         const fm = frontmatter as Frontmatter;
 
         // Validate required fields
-        if (!fm.author || !fm.title || !fm.lang || !fm.category) {
-            console.error(`❌ Missing required frontmatter in ${filename}:`, {
-                author: !!fm.author,
-                title: !!fm.title,
-                lang: !!fm.lang,
-                category: !!fm.category
-            });
+        const missingFields = validateFrontmatter(fm);
+        if (missingFields.length > 0) {
+            log.warn(`Missing required fields in ${filename}: ${missingFields.join(', ')}`);
             return false;
         }
 
-        // Normalize language code
+        // Process metadata
         const normalizedLang = normalizeText(fm.lang);
         const languageName = getLanguageName(normalizedLang);
 
-        // Transliterate author and title to English using the library
-        const transliteratedAuthor = transliterate(fm.author);
-        const transliteratedTitle = transliterate(fm.title);
+        // FIX: Use correct function calls with proper parameters
+        const transliteratedAuthor = transliterateAuthorName(fm.author, normalizedLang);
+        const transliteratedTitle = transliterate(fm.title, { lang: normalizedLang });
+        const slug = generateSlug(fm.title, fm.author, normalizedLang);
 
-        // Generate slug using the library's slugify function
-        const slug = generateSlug(fm.title, fm.author);
+        // Parse duration properly
+        const duration = parseDuration(fm.duration);
+        if (fm.duration && duration === null) {
+            log.warn(`Invalid duration format in ${filename}: ${fm.duration}`);
+        }
 
         // Create/find language record
         const languageData: LanguageData = {
@@ -100,7 +197,7 @@ export async function processMarkdownFile(filename: string): Promise<boolean> {
             thumbnailUrl: fm.thumbnail || null,
             audioUrl: fm.audio || null,
             wordCount: fm.words || null,
-            duration: fm.duration || null,
+            duration: duration,
             isPublished: fm.published === true,
             isFeatured: false,
             languageId,
@@ -111,14 +208,11 @@ export async function processMarkdownFile(filename: string): Promise<boolean> {
         // Create or update article
         await upsertArticle(articleData);
 
-        console.log(`✅ Processed: ${fm.title} by ${fm.author}`);
-        console.log(`   Slug: ${slug}`);
-        console.log(`   Language: ${languageName} (${normalizedLang})`);
-
+        log.success(`Processed: ${fm.title} by ${fm.author}`);
         return true;
 
     } catch (error) {
-        console.error(`❌ Error processing ${filename}:`, error);
+        log.error(`Error processing ${filename}: ${error}`);
         return false;
     }
 }
@@ -131,11 +225,12 @@ export async function processCommitChanges(commits: CommitInfo[]): Promise<void>
     const processedSlugs = new Set<string>();
     let totalProcessed = 0;
     let totalErrors = 0;
+    let totalWarnings = 0;
 
-    console.log(`🔄 Processing ${commits.length} commits...`);
+    log.info(`Processing ${commits.length} commits`);
 
     for (const commit of commits) {
-        console.log(`📝 Processing commit by ${commit.username}: ${commit.message.substring(0, 50)}...`);
+        log.info(`Processing commit by ${commit.username}: ${commit.message.substring(0, 50)}...`);
 
         for (const fileChange of commit.files) {
             try {
@@ -150,58 +245,136 @@ export async function processCommitChanges(commits: CommitInfo[]): Promise<void>
                         const fileContent = getMarkdownFileContent(fileChange.filename);
                         if (fileContent) {
                             const { data } = matter(fileContent);
-                            const slug = generateSlug(data.title, data.author);
-                            processedSlugs.add(slug);
+                            if (data.title && data.author) {
+                                const slug = generateSlug(data.title, data.author, data.lang || 'hi');
+                                processedSlugs.add(slug);
+                            }
                         }
                         totalProcessed++;
                     } else {
-                        totalErrors++;
+                        totalWarnings++;
                     }
                 }
             } catch (error) {
-                console.error(`❌ Error processing file ${fileChange.filename}:`, error);
+                log.alert(`Failed to process file ${fileChange.filename}: ${error}`);
                 totalErrors++;
             }
         }
     }
 
-    console.log(`📊 Processing complete: ${totalProcessed} successful, ${totalErrors} errors`);
+    // Final summary
+    log.info('Processing summary:');
+    log.success(`Articles processed: ${totalProcessed}`);
+    if (totalWarnings > 0) {
+        log.warn(`Warnings: ${totalWarnings} (missing/invalid fields)`);
+    }
+    if (totalErrors > 0) {
+        log.alert(`Errors: ${totalErrors} (processing failures)`);
+    }
 }
 
 /**
  * Handles file removal by soft deleting the corresponding article
+ * Currently logs the removal - could be enhanced to identify articles by filename mapping
  */
 async function handleFileRemoval(filename: string, deletedByUsername: string): Promise<void> {
     try {
-        console.log(`🗑️ File removed: ${filename} by ${deletedByUsername}`);
-        // Note: To properly implement this, you would need to maintain a mapping 
-        // of filename to slug, or store filename in the articles table
+        log.info(`File removed: ${filename} by ${deletedByUsername}`);
+
+        // Note: To properly implement this, you would need to:
+        // 1. Maintain a mapping of filename to slug in the database
+        // 2. Or store the original filename in the articles table
+        // 3. Then use that to identify which article to soft delete
+
+        // For now, we just log the removal
+        // Future enhancement: implement proper article identification
 
     } catch (error) {
-        console.error(`❌ Error handling file removal ${filename}:`, error);
+        log.error(`Error handling file removal ${filename}: ${error}`);
     }
 }
 
 /**
- * Extracts a short description from markdown content
- * Uses first paragraph or falls back to first 150 characters
+ * Batch processes multiple markdown files
+ * Used by manual sync and bulk operations
  */
-function extractShortDescription(markdownContent: string): string {
-    // Remove markdown headers and get first paragraph
-    const lines = markdownContent
-        .replace(/^#+\s+/gm, '') // Remove headers
-        .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
-        .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
+export async function batchProcessMarkdownFiles(filePaths: string[]): Promise<{
+    processed: number;
+    errors: number;
+    warnings: number;
+}> {
+    let processed = 0;
+    let errors = 0;
+    let warnings = 0;
 
-    const firstParagraph = lines[0] || '';
+    log.info(`Batch processing ${filePaths.length} files`);
 
-    // Limit to 150 characters
-    if (firstParagraph.length <= 150) {
-        return firstParagraph;
+    for (const filePath of filePaths) {
+        try {
+            const success = await processMarkdownFile(filePath);
+            if (success) {
+                processed++;
+            } else {
+                warnings++;
+            }
+        } catch (error) {
+            log.alert(`Batch processing failed for ${filePath}: ${error}`);
+            errors++;
+        }
     }
 
-    return firstParagraph.substring(0, 147) + '...';
+    return { processed, errors, warnings };
+}
+
+/**
+ * Validates all markdown files in a directory
+ * Returns validation report without processing
+ */
+export async function validateMarkdownFiles(filePaths: string[]): Promise<{
+    validFiles: string[];
+    invalidFiles: Array<{ file: string; issues: string[] }>;
+}> {
+    const validFiles: string[] = [];
+    const invalidFiles: Array<{ file: string; issues: string[] }> = [];
+
+    for (const filePath of filePaths) {
+        try {
+            const fileContent = getMarkdownFileContent(filePath);
+            if (!fileContent) {
+                invalidFiles.push({
+                    file: filePath,
+                    issues: ['Could not read file']
+                });
+                continue;
+            }
+
+            const { data: frontmatter } = matter(fileContent);
+            const fm = frontmatter as Frontmatter;
+
+            const missingFields = validateFrontmatter(fm);
+            const issues: string[] = [];
+
+            if (missingFields.length > 0) {
+                issues.push(`Missing fields: ${missingFields.join(', ')}`);
+            }
+
+            if (fm.duration && parseDuration(fm.duration) === null) {
+                issues.push(`Invalid duration format: ${fm.duration}`);
+            }
+
+            if (issues.length > 0) {
+                invalidFiles.push({ file: filePath, issues });
+            } else {
+                validFiles.push(filePath);
+            }
+
+        } catch (error) {
+            invalidFiles.push({
+                file: filePath,
+                issues: [`Parse error: ${error}`]
+            });
+        }
+    }
+
+    return { validFiles, invalidFiles };
 }

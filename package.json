@@ -8,6 +8,8 @@
     "dev": "node --env-file=.env.local -r ts-node/register src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env.local -r tsx ./src/db/migrate.ts",
+    "db:reset": "node --env-file=.env.local -r tsx scripts/reset-database.ts",
+    "db:update-authors": "node --env-file=.env.local -r tsx scripts/update-authors.ts",
     "sync:manual": "node --env-file=.env.local -r tsx scripts/manual-sync.ts"
   },
   "keywords": [],

@@ -13,7 +13,16 @@ import {
     type LanguageData,
     type ArticleData
 } from '../src/services/database';
-import { transliterate, generateSlug, normalizeText, getLanguageName } from '../src/utils/transliteration';
+import { transliterateAuthorName, transliterate, generateSlug, normalizeText, getLanguageName } from '../src/utils/transliteration';
+
+// Logging utilities
+const log = {
+    info: (msg: string) => console.log(`[INFO] ${msg}`),
+    warn: (msg: string) => console.log(`[WARN] ${msg}`),
+    error: (msg: string) => console.log(`[ERROR] ${msg}`),
+    success: (msg: string) => console.log(`[OK] ${msg}`),
+    alert: (msg: string) => console.log(`[ALERT] ${msg}`)
+};
 
 type Frontmatter = {
     author: string;
@@ -24,7 +33,7 @@ type Frontmatter = {
     thumbnail?: string;
     audio?: string;
     words?: number;
-    duration?: number;
+    duration?: string | number;
     published?: boolean;
 };
 
@@ -57,24 +66,66 @@ function extractShortDescription(markdownContent: string): string {
     return firstParagraph.substring(0, 147) + '...';
 }
 
+// Convert duration from MM:SS format to total seconds
+function parseDuration(duration: string | number | undefined): number | null {
+    if (!duration) return null;
+
+    if (typeof duration === 'number') return duration;
+
+    const durationStr = duration.toString();
+
+    // Handle MM:SS format
+    if (durationStr.includes(':')) {
+        const parts = durationStr.split(':');
+        if (parts.length === 2) {
+            const minutes = parseInt(parts[0], 10);
+            const seconds = parseInt(parts[1], 10);
+            if (!isNaN(minutes) && !isNaN(seconds)) {
+                return minutes * 60 + seconds;
+            }
+        }
+        // Handle HH:MM:SS format
+        if (parts.length === 3) {
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            const seconds = parseInt(parts[2], 10);
+            if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+                return hours * 3600 + minutes * 60 + seconds;
+            }
+        }
+    }
+
+    // Handle plain number
+    const parsed = parseInt(durationStr.replace(/[^\d]/g, ''), 10);
+    return isNaN(parsed) ? null : parsed;
+}
+
 function parseMarkdownFile(filePath: string): ProcessedMetadata | null {
     try {
         const fileContent = readFileSync(filePath, 'utf8');
         const { data: frontmatter, content: markdownContent } = matter(fileContent);
         const fm = frontmatter as Frontmatter;
 
-        // Validate required fields
-        if (!fm.author || !fm.title || !fm.lang || !fm.category) {
-            console.error(`❌ Missing required frontmatter in ${filePath}`);
+        // Validate required fields - FIX: Explicitly type as string[]
+        const missingFields: string[] = [];
+        if (!fm.author) missingFields.push('author');
+        if (!fm.title) missingFields.push('title');
+        if (!fm.lang) missingFields.push('lang');
+        if (!fm.category) missingFields.push('category');
+
+        if (missingFields.length > 0) {
+            log.warn(`Missing required fields in ${filePath}: ${missingFields.join(', ')}`);
             return null;
         }
 
         // Process metadata
         const normalizedLang = normalizeText(fm.lang);
         const languageName = getLanguageName(normalizedLang);
-        const transliteratedAuthor = transliterate(fm.author);
-        const transliteratedTitle = transliterate(fm.title);
-        const slug = generateSlug(fm.title, fm.author);
+
+        // FIX: Use correct function calls with proper parameters
+        const transliteratedAuthor = transliterateAuthorName(fm.author, normalizedLang);
+        const transliteratedTitle = transliterate(fm.title, { lang: normalizedLang });
+        const slug = generateSlug(fm.title, fm.author, normalizedLang);
 
         return {
             frontmatter: fm,
@@ -88,7 +139,7 @@ function parseMarkdownFile(filePath: string): ProcessedMetadata | null {
         };
 
     } catch (error) {
-        console.error(`❌ Error parsing ${filePath}:`, error);
+        log.error(`Failed to parse ${filePath}: ${error}`);
         return null;
     }
 }
@@ -109,7 +160,7 @@ function findMarkdownFiles(dir: string): string[] {
             }
         }
     } catch (error) {
-        console.error(`❌ Error reading directory ${dir}:`, error);
+        log.error(`Error reading directory ${dir}: ${error}`);
     }
 
     return files;
@@ -120,7 +171,7 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
     authorMap: Map<string, string>;
     categoryMap: Map<string, string>;
 }> {
-    console.log('\n🏗️ PHASE 1: Populating Reference Tables...\n');
+    log.info('PHASE 1: Populating reference tables');
 
     const languageMap = new Map<string, string>();
     const authorMap = new Map<string, string>();
@@ -137,10 +188,9 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
         uniqueCategories.add(normalizeText(file.frontmatter.category));
     }
 
-    console.log(`📊 Found ${uniqueLanguages.size} unique languages, ${uniqueAuthors.size} unique authors, ${uniqueCategories.size} unique categories`);
+    log.info(`Found ${uniqueLanguages.size} languages, ${uniqueAuthors.size} authors, ${uniqueCategories.size} categories`);
 
-    // 1. POPULATE LANGUAGES FIRST (no dependencies)
-    console.log('\n1️⃣ Processing Languages...');
+    // Process languages
     for (const langCode of uniqueLanguages) {
         const languageName = getLanguageName(langCode);
         const languageData: LanguageData = {
@@ -150,11 +200,10 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
 
         const languageId = await findOrCreateLanguage(languageData);
         languageMap.set(langCode, languageId);
-        console.log(`   🌐 ${languageName} (${langCode}) → ${languageId.substring(0, 8)}...`);
     }
+    log.success('Languages processed');
 
-    // 2. POPULATE AUTHORS (no dependencies)
-    console.log('\n2️⃣ Processing Authors...');
+    // Process authors
     for (const file of processedFiles) {
         const authorKey = file.frontmatter.author;
 
@@ -166,12 +215,11 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
 
             const authorId = await findOrCreateAuthor(authorData);
             authorMap.set(authorKey, authorId);
-            console.log(`   👤 ${file.frontmatter.author} → ${file.transliteratedAuthor} → ${authorId.substring(0, 8)}...`);
         }
     }
+    log.success('Authors processed');
 
-    // 3. POPULATE CATEGORIES (no dependencies)
-    console.log('\n3️⃣ Processing Categories...');
+    // Process categories
     for (const category of uniqueCategories) {
         const categoryData: CategoryData = {
             name: category
@@ -179,10 +227,8 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
 
         const categoryId = await findOrCreateCategory(categoryData);
         categoryMap.set(category, categoryId);
-        console.log(`   📂 ${category} → ${categoryId.substring(0, 8)}...`);
     }
-
-    console.log('\n✅ All reference tables populated!\n');
+    log.success('Categories processed');
 
     return { languageMap, authorMap, categoryMap };
 }
@@ -192,26 +238,34 @@ async function processArticles(
     languageMap: Map<string, string>,
     authorMap: Map<string, string>,
     categoryMap: Map<string, string>
-): Promise<{ processed: number; errors: number }> {
-    console.log('🏗️ PHASE 2: Processing Articles...\n');
+): Promise<{ processed: number; errors: number; warnings: number }> {
+    log.info('PHASE 2: Processing articles');
 
     let processed = 0;
     let errors = 0;
+    let warnings = 0;
 
     for (const file of processedFiles) {
         try {
-            // Get IDs from maps (no database calls needed)
+            // Get IDs from maps
             const languageId = languageMap.get(file.normalizedLang);
             const authorId = authorMap.get(file.frontmatter.author);
             const categoryId = categoryMap.get(normalizeText(file.frontmatter.category));
 
             if (!languageId || !authorId || !categoryId) {
-                console.error(`❌ Missing reference IDs for ${file.filePath}`);
-                errors++;
+                log.warn(`Missing reference IDs for ${file.filePath}`);
+                warnings++;
                 continue;
             }
 
-            // Create article data using pre-populated IDs
+            // Parse duration properly
+            const duration = parseDuration(file.frontmatter.duration);
+            if (file.frontmatter.duration && duration === null) {
+                log.warn(`Invalid duration format in ${file.filePath}: ${file.frontmatter.duration}`);
+                warnings++;
+            }
+
+            // Create article data
             const articleData: ArticleData = {
                 slug: file.slug,
                 title: file.transliteratedTitle,
@@ -222,7 +276,7 @@ async function processArticles(
                 thumbnailUrl: file.frontmatter.thumbnail || null,
                 audioUrl: file.frontmatter.audio || null,
                 wordCount: file.frontmatter.words || null,
-                duration: file.frontmatter.duration || null,
+                duration: duration,
                 isPublished: file.frontmatter.published === true,
                 isFeatured: false,
                 languageId,
@@ -231,36 +285,32 @@ async function processArticles(
             };
 
             await upsertArticle(articleData);
-
-            console.log(`✅ ${file.frontmatter.title} by ${file.frontmatter.author} → ${file.slug}`);
             processed++;
 
         } catch (error) {
-            console.error(`❌ Error processing article ${file.filePath}:`, error);
+            log.alert(`Failed to process article ${file.filePath}: ${error}`);
             errors++;
         }
     }
 
-    return { processed, errors };
+    return { processed, errors, warnings };
 }
 
 async function main() {
     try {
-        console.log('🚀 Starting Manual Content Sync...');
-        console.log('='.repeat(50));
+        log.info('Starting manual content sync');
 
         // Connect to database
         await createDbConnection();
-        console.log('💾 Database connected');
+        log.success('Database connected');
 
         // Find and parse all markdown files
         const contentDir = join(process.cwd(), 'content');
         const markdownFiles = findMarkdownFiles(contentDir);
 
-        console.log(`📚 Found ${markdownFiles.length} markdown files`);
+        log.info(`Found ${markdownFiles.length} markdown files`);
 
         // Parse all files first
-        console.log('\n📖 Parsing markdown files...');
         const processedFiles: ProcessedMetadata[] = [];
 
         for (const file of markdownFiles) {
@@ -270,41 +320,41 @@ async function main() {
             }
         }
 
-        console.log(`📝 Successfully parsed ${processedFiles.length} files`);
+        log.info(`Successfully parsed ${processedFiles.length} files`);
 
         if (processedFiles.length === 0) {
-            console.log('❌ No valid files to process');
+            log.alert('No valid files to process');
             process.exit(1);
         }
 
-        // PHASE 1: Populate all reference tables first
+        // Process reference tables and articles
         const { languageMap, authorMap, categoryMap } = await populateReferenceTablesFirst(processedFiles);
-
-        // PHASE 2: Process articles using pre-populated reference IDs
-        const { processed, errors } = await processArticles(processedFiles, languageMap, authorMap, categoryMap);
+        const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap);
 
         // Final summary
         console.log('\n' + '='.repeat(50));
-        console.log('📊 FINAL SUMMARY:');
-        console.log(`📚 Total files found: ${markdownFiles.length}`);
-        console.log(`📝 Valid files parsed: ${processedFiles.length}`);
-        console.log(`🌐 Languages processed: ${languageMap.size}`);
-        console.log(`👤 Authors processed: ${authorMap.size}`);
-        console.log(`📂 Categories processed: ${categoryMap.size}`);
-        console.log(`✅ Articles processed: ${processed}`);
-        console.log(`❌ Errors: ${errors}`);
-        console.log('='.repeat(50));
+        console.log('SYNC SUMMARY:');
+        console.log(`Total files found: ${markdownFiles.length}`);
+        console.log(`Valid files parsed: ${processedFiles.length}`);
+        console.log(`Languages uploaded: ${languageMap.size}`);
+        console.log(`Authors uploaded: ${authorMap.size}`);
+        console.log(`Categories uploaded: ${categoryMap.size}`);
+        console.log(`Articles uploaded: ${processed}`);
+
+        if (warnings > 0) {
+            log.warn(`${warnings} warnings (missing/invalid fields)`);
+        }
 
         if (errors > 0) {
-            console.log('⚠️  Some files had errors. Check logs above for details.');
+            log.alert(`${errors} upload failures`);
             process.exit(1);
         } else {
-            console.log('🎉 All files processed successfully!');
+            log.success('All files processed successfully');
             process.exit(0);
         }
 
     } catch (error) {
-        console.error('❌ Manual sync failed:', error);
+        log.alert(`Manual sync failed: ${error}`);
         process.exit(1);
     }
 }
