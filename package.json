@@ -17,7 +17,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.5.2",
   "dependencies": {
-    "@indic-transliteration/sanscript": "^1.3.3",
+    "@google/generative-ai": "^0.24.1",
     "drizzle-orm": "^0.44.4",
     "express": "^5.1.0",
     "gray-matter": "^4.0.3",

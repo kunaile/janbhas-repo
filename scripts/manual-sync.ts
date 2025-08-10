@@ -1,5 +1,5 @@
 // scripts/manual-sync.ts
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import matter from 'gray-matter';
 import { createDbConnection } from '../src/db';
@@ -13,7 +13,7 @@ import {
     type LanguageData,
     type ArticleData
 } from '../src/services/database';
-import { transliterateAuthorName, transliterate, generateSlug, normalizeText, getLanguageName } from '../src/utils/transliteration';
+import { batchTransliterateTexts, normalizeText, getLanguageName } from '../src/utils/transliteration';
 
 // Logging utilities
 const log = {
@@ -58,23 +58,14 @@ function extractShortDescription(markdownContent: string): string {
         .filter(line => line.length > 0);
 
     const firstParagraph = lines[0] || '';
-
-    if (firstParagraph.length <= 150) {
-        return firstParagraph;
-    }
-
-    return firstParagraph.substring(0, 147) + '...';
+    return firstParagraph.length <= 150 ? firstParagraph : firstParagraph.substring(0, 147) + '...';
 }
 
-// Convert duration from MM:SS format to total seconds
 function parseDuration(duration: string | number | undefined): number | null {
     if (!duration) return null;
-
     if (typeof duration === 'number') return duration;
 
     const durationStr = duration.toString();
-
-    // Handle MM:SS format
     if (durationStr.includes(':')) {
         const parts = durationStr.split(':');
         if (parts.length === 2) {
@@ -95,18 +86,17 @@ function parseDuration(duration: string | number | undefined): number | null {
         }
     }
 
-    // Handle plain number
     const parsed = parseInt(durationStr.replace(/[^\d]/g, ''), 10);
     return isNaN(parsed) ? null : parsed;
 }
 
-function parseMarkdownFile(filePath: string): ProcessedMetadata | null {
+function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'slug'> | null {
     try {
         const fileContent = readFileSync(filePath, 'utf8');
         const { data: frontmatter, content: markdownContent } = matter(fileContent);
         const fm = frontmatter as Frontmatter;
 
-        // Validate required fields - FIX: Explicitly type as string[]
+        // Validate required fields - FIXED: Explicitly type as string[]
         const missingFields: string[] = [];
         if (!fm.author) missingFields.push('author');
         if (!fm.title) missingFields.push('title');
@@ -114,26 +104,16 @@ function parseMarkdownFile(filePath: string): ProcessedMetadata | null {
         if (!fm.category) missingFields.push('category');
 
         if (missingFields.length > 0) {
-            log.warn(`Missing required fields in ${filePath}: ${missingFields.join(', ')}`);
-            return null;
+            throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
         }
 
-        // Process metadata
         const normalizedLang = normalizeText(fm.lang);
         const languageName = getLanguageName(normalizedLang);
-
-        // FIX: Use correct function calls with proper parameters
-        const transliteratedAuthor = transliterateAuthorName(fm.author, normalizedLang);
-        const transliteratedTitle = transliterate(fm.title, { lang: normalizedLang });
-        const slug = generateSlug(fm.title, fm.author, normalizedLang);
 
         return {
             frontmatter: fm,
             markdownContent,
             filePath,
-            transliteratedAuthor,
-            transliteratedTitle,
-            slug,
             normalizedLang,
             languageName
         };
@@ -166,6 +146,67 @@ function findMarkdownFiles(dir: string): string[] {
     return files;
 }
 
+/**
+ * Batch process all transliterations using Gemini API
+ * FIXED: Explicit typing for arrays to avoid TypeScript 'never' errors
+ */
+async function batchProcessTransliterations(
+    parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'slug'>>
+): Promise<ProcessedMetadata[]> {
+    log.info('Starting batch transliteration with Gemini API');
+
+    // FIXED: Explicitly type the items array to avoid 'never' type error
+    const items: Array<{ text: string; type: 'title' | 'author'; language: string }> = [];
+
+    // Collect all texts for batch processing
+    for (const file of parsedFiles) {
+        items.push(
+            { text: file.frontmatter.title, type: 'title', language: file.normalizedLang },
+            { text: file.frontmatter.author, type: 'author', language: file.normalizedLang }
+        );
+    }
+
+    // Process all transliterations in one batch
+    const results = await batchTransliterateTexts(items);
+
+    // Apply results back to files
+    const processedFiles: ProcessedMetadata[] = [];
+
+    for (const file of parsedFiles) {
+        const transliteratedTitle = results.get(file.frontmatter.title);
+        const transliteratedAuthor = results.get(file.frontmatter.author);
+
+        if (!transliteratedTitle || !transliteratedAuthor) {
+            throw new Error(`Transliteration incomplete for ${file.filePath}`);
+        }
+
+        // Generate slug
+        const titleSlug = transliteratedTitle
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9\-]/g, '')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        const authorSlug = transliteratedAuthor
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9\-]/g, '')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        const slug = `${titleSlug || 'untitled'}_by_${authorSlug || 'unknown'}`;
+
+        processedFiles.push({
+            ...file,
+            transliteratedAuthor,
+            transliteratedTitle,
+            slug
+        });
+    }
+
+    log.success(`Batch transliteration completed for ${processedFiles.length} files`);
+    return processedFiles;
+}
+
 async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[]): Promise<{
     languageMap: Map<string, string>;
     authorMap: Map<string, string>;
@@ -195,9 +236,8 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
         const languageName = getLanguageName(langCode);
         const languageData: LanguageData = {
             name: languageName,
-            code: langCode,
+            code: langCode
         };
-
         const languageId = await findOrCreateLanguage(languageData);
         languageMap.set(langCode, languageId);
     }
@@ -206,13 +246,11 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
     // Process authors
     for (const file of processedFiles) {
         const authorKey = file.frontmatter.author;
-
         if (!authorMap.has(authorKey)) {
             const authorData: AuthorData = {
                 name: file.transliteratedAuthor,
                 localName: file.frontmatter.author
             };
-
             const authorId = await findOrCreateAuthor(authorData);
             authorMap.set(authorKey, authorId);
         }
@@ -221,10 +259,7 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
 
     // Process categories
     for (const category of uniqueCategories) {
-        const categoryData: CategoryData = {
-            name: category
-        };
-
+        const categoryData: CategoryData = { name: category };
         const categoryId = await findOrCreateCategory(categoryData);
         categoryMap.set(category, categoryId);
     }
@@ -298,36 +333,41 @@ async function processArticles(
 
 async function main() {
     try {
-        log.info('Starting manual content sync');
+        log.info('Starting manual content sync with Gemini API transliteration');
 
-        // Connect to database
+        // Validate Gemini API key
+        if (!process.env.GOOGLE_GEMINI_API_KEY) {
+            throw new Error('GOOGLE_GEMINI_API_KEY not configured in environment');
+        }
+
         await createDbConnection();
         log.success('Database connected');
 
-        // Find and parse all markdown files
         const contentDir = join(process.cwd(), 'content');
         const markdownFiles = findMarkdownFiles(contentDir);
-
         log.info(`Found ${markdownFiles.length} markdown files`);
 
-        // Parse all files first
-        const processedFiles: ProcessedMetadata[] = [];
+        // FIXED: Explicitly type the parsedFiles array to avoid 'never' type error
+        const parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'slug'>> = [];
 
+        // Parse all files
         for (const file of markdownFiles) {
-            const processed = parseMarkdownFile(file);
-            if (processed) {
-                processedFiles.push(processed);
+            const parsed = parseMarkdownFile(file);
+            if (parsed) {
+                parsedFiles.push(parsed);
             }
         }
 
-        log.info(`Successfully parsed ${processedFiles.length} files`);
+        log.info(`Successfully parsed ${parsedFiles.length} files`);
 
-        if (processedFiles.length === 0) {
-            log.alert('No valid files to process');
-            process.exit(1);
+        if (parsedFiles.length === 0) {
+            throw new Error('No valid files to process');
         }
 
-        // Process reference tables and articles
+        // Batch process transliterations - FAIL IF THIS FAILS
+        const processedFiles = await batchProcessTransliterations(parsedFiles);
+
+        // Continue with database operations
         const { languageMap, authorMap, categoryMap } = await populateReferenceTablesFirst(processedFiles);
         const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap);
 
@@ -335,7 +375,7 @@ async function main() {
         console.log('\n' + '='.repeat(50));
         console.log('SYNC SUMMARY:');
         console.log(`Total files found: ${markdownFiles.length}`);
-        console.log(`Valid files parsed: ${processedFiles.length}`);
+        console.log(`Valid files parsed: ${parsedFiles.length}`);
         console.log(`Languages uploaded: ${languageMap.size}`);
         console.log(`Authors uploaded: ${authorMap.size}`);
         console.log(`Categories uploaded: ${categoryMap.size}`);
@@ -346,12 +386,11 @@ async function main() {
         }
 
         if (errors > 0) {
-            log.alert(`${errors} upload failures`);
-            process.exit(1);
-        } else {
-            log.success('All files processed successfully');
-            process.exit(0);
+            throw new Error(`${errors} articles failed to process`);
         }
+
+        log.success('All files processed successfully');
+        process.exit(0);
 
     } catch (error) {
         log.alert(`Manual sync failed: ${error}`);

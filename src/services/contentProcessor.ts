@@ -1,8 +1,4 @@
 // src/services/contentProcessor.ts
-/**
- * Content processing service with enhanced error handling and clean logging
- * Handles extraction of metadata from markdown files and database operations
- */
 import matter from 'gray-matter';
 import {
     findOrCreateAuthor,
@@ -32,21 +28,20 @@ const log = {
  * Expected frontmatter structure from markdown files
  */
 type Frontmatter = {
-    author: string;          // Local language author name
-    title: string;           // Local language title
-    category: string;        // Category name
-    lang: string;           // Language code
-    date?: string;          // Published date
-    thumbnail?: string;     // Thumbnail URL
-    audio?: string;         // Audio URL
-    words?: number;         // Word count
-    duration?: string | number; // Duration in MM:SS format or seconds
-    published?: boolean;    // Publication status
+    author: string;
+    title: string;
+    category: string;
+    lang: string;
+    date?: string;
+    thumbnail?: string;
+    audio?: string;
+    words?: number;
+    duration?: string | number;
+    published?: boolean;
 };
 
 /**
  * Converts duration from MM:SS format to total seconds
- * Handles various input formats gracefully
  */
 function parseDuration(duration: string | number | undefined): number | null {
     if (!duration) return null;
@@ -83,25 +78,22 @@ function parseDuration(duration: string | number | undefined): number | null {
 
 /**
  * Extracts a short description from markdown content
- * Uses first paragraph or falls back to first 150 characters
  */
 function extractShortDescription(markdownContent: string): string {
     if (!markdownContent) return '';
 
-    // Remove markdown headers and formatting
     const lines = markdownContent
-        .replace(/^#+\s+/gm, '')        // Remove headers
-        .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
-        .replace(/\*(.*?)\*/g, '$1')     // Remove italic formatting
-        .replace(/`(.*?)`/g, '$1')       // Remove code formatting
-        .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links, keep text
+        .replace(/^#+\s+/gm, '')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`(.*?)`/g, '$1')
+        .replace(/\[(.*?)\]\(.*?\)/g, '$1')
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
     const firstParagraph = lines[0] || '';
 
-    // Limit to 150 characters
     if (firstParagraph.length <= 150) {
         return firstParagraph;
     }
@@ -111,11 +103,10 @@ function extractShortDescription(markdownContent: string): string {
 
 /**
  * Validates required frontmatter fields
- * Returns array of missing field names
  */
 function validateFrontmatter(fm: Frontmatter): string[] {
     const required = ['author', 'title', 'lang', 'category'];
-    const missing: string[] = []; // FIX: Explicitly type as string[]
+    const missing: string[] = [];
 
     for (const field of required) {
         if (!fm[field as keyof Frontmatter]) {
@@ -128,7 +119,7 @@ function validateFrontmatter(fm: Frontmatter): string[] {
 
 /**
  * Processes a single markdown file and updates the database
- * Extracts metadata, transliterates content, and creates/updates records
+ * UPDATED: Now handles async transliteration
  */
 export async function processMarkdownFile(filename: string): Promise<boolean> {
     try {
@@ -155,10 +146,13 @@ export async function processMarkdownFile(filename: string): Promise<boolean> {
         const normalizedLang = normalizeText(fm.lang);
         const languageName = getLanguageName(normalizedLang);
 
-        // FIX: Use correct function calls with proper parameters
-        const transliteratedAuthor = transliterateAuthorName(fm.author, normalizedLang);
-        const transliteratedTitle = transliterate(fm.title, { lang: normalizedLang });
-        const slug = generateSlug(fm.title, fm.author, normalizedLang);
+        // UPDATED: Use async transliteration with Promise.all for better performance
+        const [transliteratedAuthor, transliteratedTitle] = await Promise.all([
+            transliterateAuthorName(fm.author, normalizedLang),
+            transliterate(fm.title, { lang: normalizedLang })
+        ]);
+
+        const slug = await generateSlug(fm.title, fm.author, normalizedLang);
 
         // Parse duration properly
         const duration = parseDuration(fm.duration);
@@ -219,7 +213,7 @@ export async function processMarkdownFile(filename: string): Promise<boolean> {
 
 /**
  * Processes all file changes from commits
- * Handles additions, modifications, and deletions
+ * UPDATED: Handles async transliteration
  */
 export async function processCommitChanges(commits: CommitInfo[]): Promise<void> {
     const processedSlugs = new Set<string>();
@@ -235,18 +229,15 @@ export async function processCommitChanges(commits: CommitInfo[]): Promise<void>
         for (const fileChange of commit.files) {
             try {
                 if (fileChange.status === 'removed') {
-                    // Handle file deletion - soft delete from database
                     await handleFileRemoval(fileChange.filename, commit.username);
                 } else {
-                    // Handle file addition or modification
                     const success = await processMarkdownFile(fileChange.filename);
                     if (success) {
-                        // Track processed slugs to avoid duplicates
                         const fileContent = getMarkdownFileContent(fileChange.filename);
                         if (fileContent) {
                             const { data } = matter(fileContent);
                             if (data.title && data.author) {
-                                const slug = generateSlug(data.title, data.author, data.lang || 'hi');
+                                const slug = await generateSlug(data.title, data.author, data.lang || 'hi');
                                 processedSlugs.add(slug);
                             }
                         }
@@ -275,20 +266,11 @@ export async function processCommitChanges(commits: CommitInfo[]): Promise<void>
 
 /**
  * Handles file removal by soft deleting the corresponding article
- * Currently logs the removal - could be enhanced to identify articles by filename mapping
  */
 async function handleFileRemoval(filename: string, deletedByUsername: string): Promise<void> {
     try {
         log.info(`File removed: ${filename} by ${deletedByUsername}`);
-
-        // Note: To properly implement this, you would need to:
-        // 1. Maintain a mapping of filename to slug in the database
-        // 2. Or store the original filename in the articles table
-        // 3. Then use that to identify which article to soft delete
-
-        // For now, we just log the removal
-        // Future enhancement: implement proper article identification
-
+        // Future enhancement: implement proper article identification and soft delete
     } catch (error) {
         log.error(`Error handling file removal ${filename}: ${error}`);
     }
@@ -296,7 +278,7 @@ async function handleFileRemoval(filename: string, deletedByUsername: string): P
 
 /**
  * Batch processes multiple markdown files
- * Used by manual sync and bulk operations
+ * UPDATED: Handles async transliteration
  */
 export async function batchProcessMarkdownFiles(filePaths: string[]): Promise<{
     processed: number;
@@ -328,7 +310,6 @@ export async function batchProcessMarkdownFiles(filePaths: string[]): Promise<{
 
 /**
  * Validates all markdown files in a directory
- * Returns validation report without processing
  */
 export async function validateMarkdownFiles(filePaths: string[]): Promise<{
     validFiles: string[];

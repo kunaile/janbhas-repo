@@ -1,11 +1,8 @@
 // src/utils/transliteration.ts
-import Sanscript from '@indic-transliteration/sanscript';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { batchTransliterate, type TransliterationItem, type TransliterationResult } from '../services/geminiTransliteration';
 
-/**
- * Language code to name mapping
- */
 const LANGUAGE_NAMES: Record<string, string> = {
     'hi': 'Hindi',
     'bn': 'Bengali',
@@ -20,19 +17,9 @@ const LANGUAGE_NAMES: Record<string, string> = {
     'en': 'English'
 };
 
-/**
- * Cache for loaded author mappings to avoid repeated file reads
- */
 const authorMappingCache: Map<string, Record<string, string>> = new Map();
 
-/**
- * Loads author mappings from JSON file for a specific language
- * 
- * @param langCode - Language code (e.g., 'hi', 'bn')
- * @returns Author mappings object
- */
 function loadAuthorMappings(langCode: string): Record<string, string> {
-    // Check cache first
     if (authorMappingCache.has(langCode)) {
         return authorMappingCache.get(langCode)!;
     }
@@ -41,18 +28,11 @@ function loadAuthorMappings(langCode: string): Record<string, string> {
         const mappingFile = join(__dirname, '../data', `author-mappings.${langCode}.json`);
         const fileContent = readFileSync(mappingFile, 'utf8');
         const mappingData = JSON.parse(fileContent);
-
         const mappings = mappingData.author_mappings || {};
-
-        // Cache the mappings
         authorMappingCache.set(langCode, mappings);
-
-        console.log(`[OK] Loaded ${Object.keys(mappings).length} author mappings for ${langCode}`);
         return mappings;
-
     } catch (error) {
-        console.warn(`[WARN] Could not load author mappings for ${langCode}: ${error}`);
-        // Return empty object if file doesn't exist
+        console.warn(`[WARN] Could not load author mappings for ${langCode}`);
         const emptyMappings = {};
         authorMappingCache.set(langCode, emptyMappings);
         return emptyMappings;
@@ -60,228 +40,160 @@ function loadAuthorMappings(langCode: string): Record<string, string> {
 }
 
 /**
- * Gets all available author mappings for multiple languages
- * 
- * @param languages - Array of language codes to load
- * @returns Combined mappings from all languages
+ * Enhanced batch transliteration with consistent case handling
  */
-function getAllAuthorMappings(languages: string[] = ['hi', 'bn']): Record<string, string> {
-    const combinedMappings: Record<string, string> = {};
+export async function batchTransliterateTexts(
+    items: Array<{ text: string; type: 'title' | 'author'; language: string }>
+): Promise<Map<string, string>> {
+    const results = new Map<string, string>();
 
-    for (const lang of languages) {
-        const langMappings = loadAuthorMappings(lang);
-        Object.assign(combinedMappings, langMappings);
+    if (items.length === 0) {
+        return results;
     }
 
-    return combinedMappings;
-}
+    // Check custom author mappings first
+    const itemsToProcess: TransliterationItem[] = [];
 
-/**
- * Maps language codes to their corresponding Sanscript identifiers
- */
-function getScriptFromLanguage(langCode: string): string {
-    switch (langCode.toLowerCase()) {
-        case 'hi':
-        case 'mr':
-        case 'sa':
-        case 'ne':
-            return 'devanagari';
-        case 'bn':
-            return 'bengali';
-        case 'gu':
-            return 'gujarati';
-        case 'kn':
-            return 'kannada';
-        case 'ml':
-            return 'malayalam';
-        case 'or':
-            return 'oriya';
-        case 'pa':
-            return 'gurmukhi';
-        case 'ta':
-            return 'tamil';
-        case 'te':
-            return 'telugu';
-        case 'en':
-            return 'iast';
-        default:
-            return 'devanagari';
-    }
-}
+    for (const item of items) {
+        if (item.type === 'author') {
+            const mappings = loadAuthorMappings(item.language);
+            const cleanName = item.text.replace(/[''"]/g, '');
 
-/**
- * Transliterates text from Indian scripts to Latin using Sanscript
- * 
- * @param text - Text to transliterate
- * @param options - Configuration options
- * @returns Transliterated text in Latin script
- */
-export function transliterate(text: string, options?: { lowercase?: boolean; lang?: string }): string {
-    if (!text || typeof text !== 'string') {
-        return '';
+            if (mappings[item.text] || mappings[cleanName]) {
+                const mapped = mappings[item.text] || mappings[cleanName];
+                results.set(item.text, mapped.toLowerCase()); // Ensure lowercase
+                console.log(`[OK] Used custom mapping: ${item.text} -> ${mapped.toLowerCase()}`);
+                continue;
+            }
+        }
+
+        itemsToProcess.push(item);
     }
 
-    const { lowercase = true, lang = 'hi' } = options || {};
-    const sourceScript = getScriptFromLanguage(lang);
+    if (itemsToProcess.length === 0) {
+        return results;
+    }
 
+    // Process remaining items with Gemini API
     try {
-        let result = Sanscript.t(text, sourceScript, 'iast');
+        const geminiResults = await batchTransliterate(itemsToProcess);
 
-        // Normalize diacritical marks
-        result = result
-            .replace(/ā/g, 'a').replace(/ī/g, 'i').replace(/ū/g, 'u')
-            .replace(/ṛ/g, 'ri').replace(/ṝ/g, 'rri').replace(/ḷ/g, 'li')
-            .replace(/ṃ/g, 'm').replace(/ṁ/g, 'm').replace(/ḥ/g, 'h')
-            .replace(/ṭ/g, 't').replace(/ḍ/g, 'd').replace(/ṇ/g, 'n')
-            .replace(/ś/g, 'sh').replace(/ṣ/g, 'sh')
-            .replace(/ʻ/g, '').replace(/'/g, '').replace(/'/g, '')
-            .replace(/"/g, '').replace(/"/g, '').replace(/"/g, '')
-            .replace(/\s+/g, ' ').trim();
+        for (const result of geminiResults) {
+            // Ensure all results are lowercase and properly formatted
+            const finalResult = result.transliterated.toLowerCase().trim();
 
-        return lowercase ? result.toLowerCase() : result;
+            if (!finalResult) {
+                throw new Error(`Empty result after processing for: "${result.original}"`);
+            }
+
+            results.set(result.original, finalResult);
+            console.log(`[OK] Transliterated: "${result.original}" -> "${finalResult}"`);
+        }
+
+        return results;
 
     } catch (error) {
-        console.warn(`[WARN] Sanscript transliteration failed: ${error}`);
-        return text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        console.error(`[ERROR] Batch transliteration failed: ${error}`);
+        throw error;
     }
 }
 
 /**
- * Enhanced transliteration for author names using JSON mappings
- * Loads mappings from language-specific JSON files
- * 
- * @param authorName - Author name in original script
- * @param langCode - Language code for loading appropriate mappings
- * @returns Transliterated author name
+ * Single text transliteration
  */
-export function transliterateAuthorName(authorName: string, langCode: string = 'hi'): string {
+export async function transliterate(text: string, options?: { lang?: string }): Promise<string> {
+    const { lang = 'hi' } = options || {};
+
+    if (!text || typeof text !== 'string') {
+        throw new Error(`Invalid text for transliteration: "${text}"`);
+    }
+
+    const items = [{ text, type: 'title' as const, language: lang }];
+    const results = await batchTransliterateTexts(items);
+
+    const result = results.get(text);
+    if (!result) {
+        throw new Error(`Transliteration failed for: "${text}"`);
+    }
+
+    return result;
+}
+
+/**
+ * Author name transliteration
+ */
+export async function transliterateAuthorName(authorName: string, langCode: string = 'hi'): Promise<string> {
     if (!authorName || typeof authorName !== 'string') {
-        return '';
+        throw new Error(`Invalid author name: "${authorName}"`);
     }
 
-    const cleanName = authorName.trim();
+    const items = [{ text: authorName, type: 'author' as const, language: langCode }];
+    const results = await batchTransliterateTexts(items);
 
-    // Load language-specific mappings
-    const languageMappings = loadAuthorMappings(langCode);
-
-    // Check exact match first
-    if (languageMappings[cleanName]) {
-        return languageMappings[cleanName];
+    const result = results.get(authorName);
+    if (!result) {
+        throw new Error(`Author transliteration failed for: "${authorName}"`);
     }
 
-    // Check without quotes/apostrophes
-    const nameWithoutQuotes = cleanName.replace(/[''"]/g, '');
-    if (languageMappings[nameWithoutQuotes]) {
-        return languageMappings[nameWithoutQuotes];
-    }
-
-    // Try other common languages as fallback
-    const allMappings = getAllAuthorMappings(['hi', 'bn', 'ta', 'te']);
-    if (allMappings[cleanName]) {
-        return allMappings[cleanName];
-    }
-    if (allMappings[nameWithoutQuotes]) {
-        return allMappings[nameWithoutQuotes];
-    }
-
-    // Fall back to automatic transliteration
-    return transliterate(cleanName, { lang: langCode });
+    return result;
 }
 
 /**
- * Generates a URL-friendly slug from title and author
- * 
- * @param title - Article title in original script
- * @param author - Author name in original script  
- * @param language - Language code for script detection
- * @returns URL-friendly slug
+ * Generate slug with enhanced validation
  */
-export function generateSlug(title: string, author: string, language: string = 'hi'): string {
+export async function generateSlug(title: string, author: string, language: string = 'hi'): Promise<string> {
     if (!title || !author) {
-        console.warn('[WARN] Missing title or author for slug generation');
-        return 'untitled_by_unknown';
+        throw new Error('Title and author are required for slug generation');
     }
 
-    const titleSlug = transliterate(title, { lang: language })
-        .replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '')
-        .replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const items = [
+        { text: title, type: 'title' as const, language },
+        { text: author, type: 'author' as const, language }
+    ];
 
-    const authorSlug = transliterateAuthorName(author, language)
-        .replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '')
-        .replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const results = await batchTransliterateTexts(items);
 
-    const finalTitle = titleSlug || 'untitled';
-    const finalAuthor = authorSlug || 'unknown';
+    const titleResult = results.get(title);
+    const authorResult = results.get(author);
 
-    return `${finalTitle}_by_${finalAuthor}`;
+    if (!titleResult || !authorResult) {
+        throw new Error('Slug generation failed - transliteration incomplete');
+    }
+
+    // Create URL-friendly slug
+    const titleSlug = titleResult
+        .replace(/\s+/g, '-')           // Spaces to hyphens
+        .replace(/[^a-z0-9\-]/g, '')    // Keep only alphanumeric and hyphens
+        .replace(/-+/g, '-')            // Multiple hyphens to single
+        .replace(/^-|-$/g, '');         // Remove leading/trailing hyphens
+
+    const authorSlug = authorResult
+        .replace(/\s+/g, '-')           // Spaces to hyphens
+        .replace(/[^a-z0-9\-]/g, '')    // Keep only alphanumeric and hyphens
+        .replace(/-+/g, '-')            // Multiple hyphens to single
+        .replace(/^-|-$/g, '');         // Remove leading/trailing hyphens
+
+    if (!titleSlug || !authorSlug) {
+        throw new Error('Slug generation failed - empty results after cleaning');
+    }
+
+    return `${titleSlug}_by_${authorSlug}`;
 }
 
 /**
- * Normalizes text for database storage
+ * Utility functions
  */
 export function normalizeText(text: string): string {
     if (!text || typeof text !== 'string') {
-        return '';
+        throw new Error(`Invalid text for normalization: "${text}"`);
     }
     return text.trim().toLowerCase();
 }
 
-/**
- * Gets the English name for a language code
- */
 export function getLanguageName(langCode: string): string {
     return LANGUAGE_NAMES[langCode.toLowerCase()] || langCode.toUpperCase();
 }
 
-/**
- * Dynamically adds a new author mapping to a specific language
- * Also saves it to the JSON file for persistence
- * 
- * @param originalName - Original name in native script
- * @param transliteratedName - Transliterated name in Latin script
- * @param langCode - Language code
- */
-export async function addAuthorMapping(
-    originalName: string,
-    transliteratedName: string,
-    langCode: string = 'hi'
-): Promise<void> {
-    try {
-        const mappings = loadAuthorMappings(langCode);
-        mappings[originalName] = transliteratedName.toLowerCase();
-
-        // Update cache
-        authorMappingCache.set(langCode, mappings);
-
-        // Save to file
-        const mappingFile = join(__dirname, '../data', `author-mappings.${langCode}.json`);
-        const fileData = {
-            language: getLanguageName(langCode),
-            language_code: langCode,
-            script: getScriptFromLanguage(langCode),
-            author_mappings: mappings
-        };
-
-        const fs = await import('fs/promises');
-        await fs.writeFile(mappingFile, JSON.stringify(fileData, null, 2), 'utf8');
-
-        console.log(`[OK] Added author mapping: ${originalName} -> ${transliteratedName} (${langCode})`);
-
-    } catch (error) {
-        console.error(`[ERROR] Failed to add author mapping: ${error}`);
-    }
-}
-
-/**
- * Gets current author mappings for a language
- */
 export function getAuthorMappings(langCode: string = 'hi'): Record<string, string> {
     return { ...loadAuthorMappings(langCode) };
-}
-
-/**
- * Clears the author mapping cache (useful for testing)
- */
-export function clearMappingCache(): void {
-    authorMappingCache.clear();
 }
