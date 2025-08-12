@@ -1,7 +1,27 @@
 {
-  "lastModified": "2025-08-07T19:36:01.368Z",
-  "totalArticles": 37,
+  "lastModified": "2025-08-12T21:51:41.702Z",
+  "totalArticles": 38,
   "articles": [
+    {
+      "title": "एक ऑंच की कसर",
+      "author": "प्रेमचंद",
+      "filepath": "content/hi/20250811_ek_aanch_ki_kasar.md",
+      "lang": "hi",
+      "slug": "20250811_ek_aanch_ki_kasar_hi",
+      "category": "short story",
+      "date": "2025-08-11",
+      "lastModified": "2025-08-10T21:47:07.483Z"
+    },
+    {
+      "title": "कांटे की नोंक",
+      "author": "गिजुभाई बधेका",
+      "filepath": "content/hi/20250812_kaante_ki_nok.md",
+      "lang": "hi",
+      "slug": "20250812_kaante_ki_nok_hi",
+      "category": "poem",
+      "date": "2025-08-12",
+      "lastModified": "2025-08-12T16:47:16.712Z"
+    },
     {
       "title": "आप बीती",
       "author": "प्रेमचंद",
@@ -20,7 +40,7 @@
       "slug": "aatm_sangeet_hi",
       "category": "short story",
       "date": "",
-      "lastModified": "2025-08-07T14:09:37.721Z"
+      "lastModified": "2025-08-10T22:06:33.306Z"
     },
     {
       "title": "अंधेर",
@@ -70,7 +90,7 @@
       "slug": "banjara_hi",
       "category": "Short Story",
       "date": "20-jul-2025",
-      "lastModified": "2025-08-07T14:07:26.610Z"
+      "lastModified": "2025-08-10T22:06:26.767Z"
     },
     {
       "title": "भोला भट्ट",
@@ -79,8 +99,8 @@
       "lang": "hi",
       "slug": "bhola_bhatt_hi",
       "category": "short story",
-      "date": "",
-      "lastModified": "2025-08-07T15:54:26.722Z"
+      "date": "2025-08-11",
+      "lastModified": "2025-08-10T22:19:59.250Z"
     },
     {
       "title": "भूत",
@@ -100,7 +120,7 @@
       "slug": "boodhi_kaki_hi",
       "category": "Short Story",
       "date": "20-jul-2025",
-      "lastModified": "2025-08-07T14:07:32.330Z"
+      "lastModified": "2025-08-12T20:07:13.788Z"
     },
     {
       "title": "चमत्कार",
@@ -131,16 +151,6 @@
       "category": "short story",
       "date": "",
       "lastModified": "2025-08-02T05:06:20.860Z"
-    },
-    {
-      "title": "एक ऑंच की कसर",
-      "author": "प्रेमचंद",
-      "filepath": "content/hi/ek_aanch_ki_kasar.md",
-      "lang": "hi",
-      "slug": "ek_aanch_ki_kasar_hi",
-      "category": "short story",
-      "date": "",
-      "lastModified": "2025-08-07T14:07:38.508Z"
     },
     {
       "title": "गरीब की हाय",
