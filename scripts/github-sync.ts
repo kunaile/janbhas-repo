@@ -1,4 +1,5 @@
 // scripts/github-sync.ts
+
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import matter from 'gray-matter';
@@ -151,7 +152,6 @@ function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'translite
             normalizedLang,
             languageName
         };
-
     } catch (error) {
         log.error(`Failed to parse ${filePath}: ${error}`);
         return null;
@@ -161,8 +161,9 @@ function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'translite
 async function handleFileRemoval(filename: string): Promise<void> {
     try {
         log.info(`Processing file removal: ${filename}`);
-        // Log removal - can be enhanced to soft delete from database
-        log.warn(`File removed: ${filename} - consider implementing soft delete`);
+        // TODO: Implement soft delete logic here
+        // You would need to identify the article by slug and call softDeleteArticle
+        log.warn(`File removed: ${filename} - soft delete logic needs implementation`);
     } catch (error) {
         log.error(`Error handling file removal ${filename}: ${error}`);
     }
@@ -183,7 +184,6 @@ async function batchProcessTransliterations(
     }
 
     const results = await batchTransliterateTexts(items);
-
     const processedFiles: ProcessedMetadata[] = [];
 
     for (const file of parsedFiles) {
@@ -208,6 +208,130 @@ async function batchProcessTransliterations(
 
     log.success(`Batch transliteration completed for ${processedFiles.length} files`);
     return processedFiles;
+}
+
+async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[]): Promise<{
+    languageMap: Map<string, string>;
+    authorMap: Map<string, string>;
+    categoryMap: Map<string, string>;
+}> {
+    log.info('PHASE 1: Populating reference tables');
+
+    const languageMap = new Map<string, string>();
+    const authorMap = new Map<string, string>();
+    const categoryMap = new Map<string, string>();
+
+    // Extract unique values
+    const uniqueLanguages = new Set<string>();
+    const uniqueAuthors = new Set<string>();
+    const uniqueCategories = new Set<string>();
+
+    for (const file of processedFiles) {
+        uniqueLanguages.add(file.normalizedLang);
+        uniqueAuthors.add(file.frontmatter.author);
+        uniqueCategories.add(normalizeText(file.frontmatter.category));
+    }
+
+    log.info(`Found ${uniqueLanguages.size} languages, ${uniqueAuthors.size} authors, ${uniqueCategories.size} categories`);
+
+    // Process languages
+    for (const langCode of uniqueLanguages) {
+        const languageName = getLanguageName(langCode);
+        const languageData: LanguageData = {
+            name: languageName,
+            code: langCode
+        };
+        const languageId = await findOrCreateLanguage(languageData);
+        languageMap.set(langCode, languageId);
+    }
+    log.success('Languages processed');
+
+    // Process authors
+    for (const file of processedFiles) {
+        const authorKey = file.frontmatter.author;
+        if (!authorMap.has(authorKey)) {
+            const authorData: AuthorData = {
+                name: file.transliteratedAuthor,
+                localName: file.frontmatter.author
+            };
+            const authorId = await findOrCreateAuthor(authorData);
+            authorMap.set(authorKey, authorId);
+        }
+    }
+    log.success('Authors processed');
+
+    // Process categories
+    for (const category of uniqueCategories) {
+        const categoryData: CategoryData = { name: category };
+        const categoryId = await findOrCreateCategory(categoryData);
+        categoryMap.set(category, categoryId);
+    }
+    log.success('Categories processed');
+
+    return { languageMap, authorMap, categoryMap };
+}
+
+async function processArticles(
+    processedFiles: ProcessedMetadata[],
+    languageMap: Map<string, string>,
+    authorMap: Map<string, string>,
+    categoryMap: Map<string, string>
+): Promise<{ processed: number; errors: number; warnings: number }> {
+    log.info('PHASE 2: Processing articles');
+
+    let processed = 0;
+    let errors = 0;
+    let warnings = 0;
+
+    for (const file of processedFiles) {
+        try {
+            // Get IDs from maps
+            const languageId = languageMap.get(file.normalizedLang);
+            const authorId = authorMap.get(file.frontmatter.author);
+            const categoryId = categoryMap.get(normalizeText(file.frontmatter.category));
+
+            if (!languageId || !authorId || !categoryId) {
+                log.warn(`Missing reference IDs for ${file.filePath}`);
+                warnings++;
+                continue;
+            }
+
+            // Parse duration properly
+            const duration = parseDuration(file.frontmatter.duration);
+            if (file.frontmatter.duration && duration === null) {
+                log.warn(`Invalid duration format in ${file.filePath}: ${file.frontmatter.duration}`);
+                warnings++;
+            }
+
+            // Create article data
+            const articleData: ArticleData = {
+                slug: file.slug,
+                title: file.transliteratedTitle,
+                localTitle: file.frontmatter.title,
+                shortDescription: extractShortDescription(file.markdownContent),
+                markdownContent: file.markdownContent,
+                publishedDate: file.frontmatter.date ? new Date(file.frontmatter.date).toISOString().split('T')[0] : null,
+                thumbnailUrl: file.frontmatter.thumbnail || null,
+                audioUrl: file.frontmatter.audio || null,
+                wordCount: file.frontmatter.words || null,
+                duration: duration,
+                isPublished: file.frontmatter.published === true,
+                isFeatured: false,
+                languageId,
+                categoryId,
+                authorId
+            };
+
+            await upsertArticle(articleData);
+            processed++;
+
+        } catch (error) {
+            log.alert(`Failed to process article ${file.filePath}: ${error}`);
+            errors++;
+        }
+    }
+
+    return { processed, errors, warnings };
 }
 
 async function processChangedFiles(changes: FileChange[]): Promise<void> {
@@ -247,14 +371,9 @@ async function processChangedFiles(changes: FileChange[]): Promise<void> {
     // Process with Gemini API
     const processedFiles = await batchProcessTransliterations(parsedFiles);
 
-    // Database operations (simplified - add your existing logic)
-    const languageMap = new Map<string, string>();
-    const authorMap = new Map<string, string>();
-    const categoryMap = new Map<string, string>();
-
-    // Process reference tables and articles (add your existing logic here)
-    let processed = 0;
-    let errors = 0;
+    // **FIXED: Actual database operations**
+    const { languageMap, authorMap, categoryMap } = await populateReferenceTablesFirst(processedFiles);
+    const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap);
 
     // Summary
     console.log('\n' + '='.repeat(50));
@@ -262,6 +381,7 @@ async function processChangedFiles(changes: FileChange[]): Promise<void> {
     console.log(`Changed files in commit: ${changes.length}`);
     console.log(`Files processed: ${processed}`);
     console.log(`Files removed: ${filesToRemove.length}`);
+    console.log(`Warnings: ${warnings}`);
     console.log(`Errors: ${errors}`);
 
     if (errors > 0) {
@@ -287,14 +407,12 @@ async function main() {
         log.success('Database connected');
 
         const changes = getChangedFiles();
-
         if (changes.length === 0) {
             log.info('No markdown files changed in this commit');
             process.exit(0);
         }
 
         log.info(`Found ${changes.length} changed files in commit`);
-
         await processChangedFiles(changes);
 
         log.success('GitHub sync completed successfully');
