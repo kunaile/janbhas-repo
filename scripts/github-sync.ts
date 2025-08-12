@@ -54,14 +54,14 @@ type ProcessedMetadata = {
 };
 
 /**
- * Get changed files from GitHub Actions environment
+ * Get changed files from GitHub Actions environment variables
  */
 function getChangedFiles(): FileChange[] {
     const changedFiles = process.env.CHANGED_FILES;
     const removedFiles = process.env.REMOVED_FILES;
 
     if (!changedFiles && !removedFiles) {
-        throw new Error('No changed files information found');
+        throw new Error('No changed files information found in environment variables');
     }
 
     const changes: FileChange[] = [];
@@ -72,7 +72,7 @@ function getChangedFiles(): FileChange[] {
             if (file.endsWith('.md') || file.endsWith('.mdx')) {
                 changes.push({
                     filename: file.trim(),
-                    status: 'modified'
+                    status: 'modified' // GitHub Actions doesn't distinguish between added/modified in CHANGED_FILES
                 });
             }
         }
@@ -118,6 +118,15 @@ function parseDuration(duration: string | number | undefined): number | null {
             const seconds = parseInt(parts[1], 10);
             if (!isNaN(minutes) && !isNaN(seconds)) {
                 return minutes * 60 + seconds;
+            }
+        }
+        // Handle HH:MM:SS format
+        if (parts.length === 3) {
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            const seconds = parseInt(parts[2], 10);
+            if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+                return hours * 3600 + minutes * 60 + seconds;
             }
         }
     }
@@ -395,6 +404,7 @@ async function main() {
     try {
         log.info('Starting GitHub commit-based content sync');
 
+        // Validate environment variables
         if (!process.env.GOOGLE_GEMINI_API_KEY) {
             throw new Error('GOOGLE_GEMINI_API_KEY not configured');
         }
@@ -403,9 +413,11 @@ async function main() {
             throw new Error('DATABASE_URL not configured');
         }
 
+        // Connect to database
         await createDbConnection();
         log.success('Database connected');
 
+        // Get changed files from environment
         const changes = getChangedFiles();
         if (changes.length === 0) {
             log.info('No markdown files changed in this commit');
@@ -413,6 +425,8 @@ async function main() {
         }
 
         log.info(`Found ${changes.length} changed files in commit`);
+
+        // Process the changes
         await processChangedFiles(changes);
 
         log.success('GitHub sync completed successfully');

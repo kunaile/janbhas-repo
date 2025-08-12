@@ -21,9 +21,10 @@ env:
 jobs:
   sync-changed-content:
     runs-on: ubuntu-latest
-    if: startsWith(github.event.head_commit.message, 'publish')
+    # FIXED: More flexible commit message matching
+    if: contains(github.event.head_commit.message, 'publish')
     timeout-minutes: 10
-    
+
     steps:
       - name: 🔐 Verify authorization
         run: |
@@ -36,34 +37,53 @@ jobs:
           fi
           
           if [[ "$AUTHORIZED_USERS" != *"$CURRENT_USER"* ]]; then
-            echo "❌ Unauthorized sync attempt"
+            echo "❌ Unauthorized sync attempt by: $CURRENT_USER"
+            echo "ℹ️  Authorized users: $AUTHORIZED_USERS"
             exit 1
           fi
           
-          echo "✅ Authorization verified"
+          echo "✅ Authorization verified for: $CURRENT_USER"
 
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: 🔍 Detect changes
+      - name: 🔍 Detect changes with enhanced rename detection
         id: changes
         run: |
-          CHANGED_FILES=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
-          REMOVED_FILES=$(git diff --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
+          echo "🔍 Analyzing commit: ${{ github.event.head_commit.message }}"
           
-          TOTAL_CHANGES=$(printf '%s\n%s' "$CHANGED_FILES" "$REMOVED_FILES" | grep -v '^$' | wc -l)
+          # FIXED: Enhanced file change detection with rename support
+          CHANGED_FILES=$(git diff -M --name-only --diff-filter=AMR HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
+          REMOVED_FILES=$(git diff -M --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
+          
+          # Also detect renames specifically
+          RENAMED_FILES=$(git diff -M --name-status HEAD~1 HEAD | grep '^R' | cut -f3 | grep -E '^content/.*\.(md|mdx)$' || true)
+          
+          # Combine all changes
+          ALL_CHANGES=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$REMOVED_FILES" "$RENAMED_FILES" | grep -v '^$' | sort -u)
+          TOTAL_CHANGES=$(echo "$ALL_CHANGES" | grep -v '^$' | wc -l)
+          
           echo "total-changes=$TOTAL_CHANGES" >> $GITHUB_OUTPUT
           
           if [ "$TOTAL_CHANGES" -gt 0 ]; then
             echo "📝 Detected $TOTAL_CHANGES file changes"
+            echo "📄 Changed files:"
+            echo "$ALL_CHANGES" | while read -r file; do
+              echo "  - $file"
+            done
+            
+            # Set environment variables for the sync script
             {
               echo "CHANGED_FILES<<EOF"
               echo "$CHANGED_FILES"
               echo "EOF"
-              echo "REMOVED_FILES<<EOF" 
+              echo "REMOVED_FILES<<EOF"
               echo "$REMOVED_FILES"
+              echo "EOF"
+              echo "RENAMED_FILES<<EOF"
+              echo "$RENAMED_FILES"
               echo "EOF"
             } >> $GITHUB_ENV
           else
@@ -81,7 +101,7 @@ jobs:
           fi
           
           if [ -z "${{ secrets.GOOGLE_GEMINI_API_KEY }}" ]; then
-            echo "❌ API key configuration missing"
+            echo "❌ API key configuration missing" 
             SECRETS_VALID=false
           fi
           
@@ -124,6 +144,10 @@ jobs:
           retry_on: error
           command: |
             echo "🔄 Processing ${{ steps.changes.outputs.total-changes }} files"
+            echo "📊 Commit info:"
+            echo "  Author: ${{ github.event.head_commit.author.name }}"
+            echo "  Message: ${{ github.event.head_commit.message }}"
+            echo "  Timestamp: ${{ github.event.head_commit.timestamp }}"
             pnpm sync:github
 
       - name: 📊 Report results
@@ -131,10 +155,24 @@ jobs:
         run: |
           if [ "${{ job.status }}" = "success" ]; then
             echo "## ✅ Content Sync Completed" >> $GITHUB_STEP_SUMMARY
-            echo "- Files processed: ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+            echo "- **Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files processed:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
           else
             echo "## ❌ Content Sync Failed" >> $GITHUB_STEP_SUMMARY
-            echo "- Files: ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Status: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: 🐛 Debug information
+        if: failure()
+        run: |
+          echo "## 🐛 Debug Information"
+          echo "- Commit message: '${{ github.event.head_commit.message }}'"
+          echo "- Contains 'publish': ${{ contains(github.event.head_commit.message, 'publish') }}"
+          echo "- Author: ${{ github.event.head_commit.author.name }}"
+          echo "- Changed files count: ${{ steps.changes.outputs.total-changes }}"
+          echo "- Environment variables set:"
+          env | grep -E '^(CHANGED_FILES|REMOVED_FILES|RENAMED_FILES)=' || echo "  No change environment variables found"
