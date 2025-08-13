@@ -8,6 +8,13 @@
       "when": 1754847326408,
       "tag": "0000_lethal_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1755098518990,
+      "tag": "0001_rich_scrambler",
+      "breakpoints": true
     }
   ]
 }
