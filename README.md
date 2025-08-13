@@ -1,4 +1,4 @@
-# Vernacular Content Management System
+# Janbhas Repo : Vernacular Writing Management System
 
 A **CLI-first, Git-based content management system** designed for vernacular language content. This system uses a Git repository as the CMS, with markdown files as the source of truth, and automatically syncs content to a PostgreSQL database via GitHub Actions.
 
@@ -108,510 +108,263 @@ AUTHORIZED_SYNC_USERS=username1,username2,username3
 ## 📁 Project Structure
 
 ```
-.
-├── .github/
-│   └── workflows/
-│       └── content-sync.yml          # GitHub Actions workflow
-├── content/                          # Content directory (source of truth)
-│   ├── hi/                          # Hindi content
-│   │   ├── story1.md
-│   │   └── poem1.md
-│   ├── en/                          # English content
-│   └── ur/                          # Urdu content
+janbhas-repo/
+├── content/                    # Markdown content files
+│   ├── hi/
+│   ├── en/
+│   └── [language-folders]
 ├── src/
-│   ├── db/                          # Database configuration
-│   │   ├── schema.ts                # Drizzle schema definitions
-│   │   ├── index.ts                 # Database connection
-│   │   └── migrations/              # Database migrations
-│   ├── services/                    # Business logic
-│   │   ├── database.ts              # Database operations
-│   │   ├── contentProcessor.ts      # Content processing logic
-│   │   └── geminiTransliteration.ts # AI transliteration service
-│   └── utils/                       # Utility functions
-│       └── transliteration.ts       # Text processing utilities
-├── scripts/                         # CLI scripts
-│   ├── manual-sync.ts               # First-time content population
-│   ├── local-sync.ts                # Local development sync
-│   ├── github-sync.ts               # GitHub Actions sync
-│   └── reset-database.ts            # Database reset utility
-├── drizzle.config.ts                # Drizzle ORM configuration
-├── package.json                     # Dependencies and scripts
-└── pnpm-lock.yaml                   # Dependency lock file
+│   ├── db/                     # Database setup and migrations
+│   ├── services/
+│   │   ├── contentProcessor/   # Modular content processing
+│   │   │   ├── types.ts
+│   │   │   ├── fileProcessor.ts
+│   │   │   ├── transliterationProcessor.ts
+│   │   │   └── index.ts
+│   │   └── database.ts         # Database operations
+│   └── utils/
+│       └── transliteration.ts  # AI transliteration utilities
+├── scripts/                    # CLI management tools
+│   ├── manual-sync.ts
+│   ├── local-sync.ts
+│   ├── github-sync.ts
+│   └── [utility-scripts]
+└── package.json
 ```
 
-## 📝 Content Structure
+## 🔧 How It Works
 
-### Frontmatter Schema
+### 1. **Content Creation**
+Writers create markdown files with YAML frontmatter in their native language:
 
-Every markdown file must include frontmatter with these fields:
-
-```yaml
+```markdown
 ---
 author: प्रेमचंद
-title: एक ऑंच की कसर
-lang: hi
+title: कफ़न
 category: short story
-sub-category: classic
-date: 2025-08-11
-thumbnail: https://example.com/image.jpg
-audio: https://example.com/audio.mp3
-words: 1644
-duration: 13:00
+sub-category: सामाजिक कहानी
+lang: hi
 published: true
-tags: [moral, classic, hindi-literature]
+featured: true
+tags: [classic, social-realism]
 ---
 
-Your markdown content goes here...
+Your story content in Hindi/Bengali/etc...
 ```
 
-#### Required Fields
-- `author`: Author name in original language
-- `title`: Title in original language  
-- `lang`: Language code (hi, en, ur, etc.)
-- `category`: Content category
+### 2. **AI Processing**
+- **Google Gemini API** transliterates titles, authors, categories, and tags
+- Maintains both original vernacular and romanized versions
+- Generates SEO-friendly slugs automatically
 
-#### Optional Fields
-- `sub-category`: Subcategory classification
-- `date`: Publication date (YYYY-MM-DD)
-- `thumbnail`: CDN link to thumbnail image
-- `audio`: CDN link to audio file
-- `words`: Word count
-- `duration`: Reading/listening duration (MM:SS format)
-- `published`: Publication status (default: false)
-- `tags`: Array of tags
+### 3. **Database Storage**
+- **PostgreSQL** with comprehensive schema
+- Stores both original (`localName`) and transliterated (`name`) versions
+- Full-text search indexes for both languages
+- Relationships: articles ↔ authors ↔ categories ↔ tags
 
-### File Naming Convention
+### 4. **Sync Workflows**
+- **Manual Sync**: Process all content files
+- **Local Sync**: Process only changed files during development
+- **GitHub Sync**: Automated processing via GitHub Actions
 
+## 📋 Prerequisites
+
+### Required Software
+- **Node.js** 22 or higher
+- **PostgreSQL** 17 or higher
+- **pnpm** package manager
+
+### API Keys
+- **Google Gemini API Key** for transliteration
+- **Database connection** (local or hosted)
+
+### Environment Setup
 ```bash
-content/{language}/{date}_{title_slug}.md
+# Install Node.js dependencies
+pnpm install
 
-# Examples:
-content/hi/20250811_ek_aanch_ki_kasar.md
-content/en/20250812_the_missing_ember.md
-content/ur/20250813_aik_aanch_ki_kami.md
 ```
 
-## 🛠️ CLI Commands
+### Environment Variables
+```env
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/janbhas
 
-### Local Development
+# AI Transliteration
+GOOGLE_GEMINI_API_KEY=your_gemini_api_key
 
-```bash
-# Process all content files
-pnpm sync:local --all
-
-# Process only changed files (git diff)
-pnpm sync:local --changed
-
-# Process files from last commit
-pnpm sync:local --recent
-
-# Dry run to preview changes
-pnpm sync:local --dry-run --verbose
-
-# Process changes since specific commit
-pnpm sync:local --since HEAD~5
-
-# Show help
-pnpm sync:local --help
+# Editor Information
+EDITOR_NAME=Your Name
+EDITOR_EMAIL=your.email@example.com
+EDITOR_GITHUB_USERNAME=yourusername
 ```
 
-### Initial Setup
+## 🚀 How to Use
 
+### 1. Initial Setup
 ```bash
-# First-time database population
-pnpm sync:manual
+# Clone repository
+git clone https://github.com/your-username/janbhas-repo.git
+cd janbhas-repo
 
-# Reset database (careful!)
-pnpm db:reset
+# Install dependencies
+pnpm install
 
-# Run database migrations
+# Setup environment
+touch .env.local
+# Edit .env.local with your database and API credentials
+
+# Initialize database
 pnpm db:migrate
 ```
 
-### Content Statistics
+### 2. Content Management
 
+#### Create Content
 ```bash
-# View content statistics
-pnpm stats
-
-# Validate content structure
-pnpm validate
+# Create a new story file
+mkdir -p content/hi
 ```
 
-## 🔄 Sync Workflows
-
-### 1. Manual Sync (First Time)
-
-**Purpose**: Initial database population
-**Trigger**: `pnpm sync:manual`
-**Editor Source**: Environment variables (`EDITOR_NAME`, `EDITOR_GITHUB_USERNAME`)
-**Scope**: All markdown files in content directory
-
-```bash
-# Setup your editor info in .env.local
-EDITOR_NAME="Your Name"
-EDITOR_GITHUB_USERNAME="your_username"
-
-# Run manual sync
-pnpm sync:manual
-```
-
-### 2. Local Development Sync
-
-**Purpose**: Ongoing local development
-**Trigger**: CLI commands with various flags
-**Editor Source**: Same environment variables
-**Scope**: Configurable (all, changed, recent, etc.)
-
-```bash
-# Daily development workflow
-pnpm sync:local --recent    # Only recent changes
-pnpm sync:local --changed   # Git diff changes
-```
-
-### 3. GitHub Actions Sync
-
-**Purpose**: Automated production deployment
-**Trigger**: Commits with "publish" in message
-**Editor Source**: Git commit author information
-**Scope**: Only changed files (efficient)
-
-```bash
-# Trigger automated sync
-git add content/hi/new_story.md
-git commit -m "publish: Add new Hindi story"
-git push
-```
-
-## 🤖 GitHub Actions Workflow
-
-The automated workflow (`.github/workflows/content-sync.yml`) handles:
-
-### Workflow Triggers
-- **Branch**: `main` only
-- **Path**: `content/**/*.md` files only
-- **Message**: Must contain "publish"
-
-### Security & Authorization
-- Verifies authorized users against `AUTHORIZED_SYNC_USERS` secret
-- Only processes commits from authorized contributors
-
-### Smart Change Detection
-- Detects added, modified, and removed files
-- Handles file renames intelligently
-- Skips workflow if no content changes detected
-
-### Editor Management
-- Automatically detects commit author
-- Creates new editor records for new contributors
-- Associates all processed content with the editor
-
-### Example Workflow Trigger
-
-```bash
-# ✅ This will trigger the workflow
-git commit -m "publish: Add new collection of poems"
-
-# ❌ This will not trigger the workflow  
-git commit -m "Update documentation"
-
-# ❌ This will be blocked if user not in AUTHORIZED_SYNC_USERS
-git commit -m "publish: Unauthorized attempt"
-```
-
-## 🗄️ Database Schema
-
-The system uses a normalized PostgreSQL schema with soft deletes:
-
-### Core Tables
-
-- **`languages`**: Language definitions (hi, en, ur, etc.)
-- **`authors`**: Author information with transliteration
-- **`categories`**: Content categorization
-- **`editors`**: User management and content attribution  
-- **`articles`**: Main content with full-text search
-
-### Key Features
-
-- **Soft deletes**: `deletedAt` timestamp for data recovery
-- **Full-text search**: GIN indexes on content and metadata
-- **Multilingual support**: Original + transliterated text storage
-- **Foreign key relationships**: Proper data normalization
-
-### Search Capabilities
-
-```sql
--- Example: Search across all content
-SELECT * FROM articles 
-WHERE search_vector @@ plainto_tsquery('english', 'search term')
-AND deleted_at IS NULL;
-```
-
-## 🌍 Multilingual Features
-
-### AI-Powered Transliteration
-
-The system uses Google Gemini API for accurate phonetic transliteration:
-
-```typescript
-// Automatic transliteration of:
-"प्रेमचंद" → "premchand"
-"पूस की रात" → "poos ki raat" 
-"कविता" → "poetry"
-```
-
-### Language Support
-
-Currently optimized for:
-- **Hindi** (`hi`): Devanagari script
-- **English** (`en`): Latin script  
-- **Urdu** (`ur`): Arabic script
-- **Extensible**: Easy to add more languages
-
-### Custom Author Mappings
-
-Override AI transliteration for well-known authors:
-
-```json
-// src/data/author-mappings.hi.json
-{
-  "प्रेमचंद": "premchand",
-  "रबींद्रनाथ टैगोर": "rabindranath-tagore"
-}
-```
-
-## 🔧 Development Workflow
-
-### Adding New Content
-
-1. **Create markdown file**
-   ```bash
-   # Create in appropriate language folder
-   touch content/hi/20250813_new_story.md
-   ```
-
-2. **Add frontmatter and content**
-   ```markdown
-   ---
-   author: नया लेखक
-   title: नई कहानी
-   lang: hi
-   category: story
-   date: 2025-08-13
-   published: true
-   ---
-   
-   यहाँ आपकी कहानी का टेक्स्ट होगा...
-   ```
-
-3. **Test locally**
-   ```bash
-   pnpm sync:local --changed --verbose
-   ```
-
-4. **Publish to production**
-   ```bash
-   git add content/hi/20250813_new_story.md
-   git commit -m "publish: Add new Hindi story"
-   git push
-   ```
-
-### Editor Management
-
-The system automatically tracks who edits content:
-
-- **Local development**: Uses `EDITOR_NAME` from environment
-- **GitHub commits**: Uses commit author information
-- **New contributors**: Automatically creates editor records
-- **Existing editors**: Links content to existing records
-
-## 🎨 Best Practices
-
-### Content Organization
-
-```bash
-# ✅ Good file naming
-content/hi/20250813_premchand_idgah.md
-content/en/20250813_premchand_idgah_english.md
-
-# ❌ Avoid spaces and special characters
-content/hi/प्रेमचंद की कहानी.md
-content/en/Story with spaces!.md
-```
-
-### Frontmatter Guidelines
-
-```yaml
-# ✅ Complete frontmatter
+Create `content/hi/kafan.md`:
+```markdown
 ---
 author: प्रेमचंद
-title: ईदगाह
+title: कफ़न
+category: कहानी
 lang: hi
-category: short story
-date: 2025-08-13
+date: 2024-12-01
 published: true
+featured: true
+words: 1500
+duration: 12:00
+tags: [सामाजिक, क्लासिक]
 ---
 
-# ❌ Missing required fields
----
-title: Some Title
-published: true
----
+Your Hindi story content here...
 ```
 
-### Git Workflow
-
+#### Sync Content to Database
 ```bash
-# ✅ Clear commit messages
-git commit -m "publish: Add Premchand collection - 5 stories"
+# Sync all content files
+pnpm sync:manual
 
-# ✅ Batch related changes
-git add content/hi/story1.md content/hi/story2.md
-git commit -m "publish: Add complete Premchand short story collection"
+# Sync only changed files (development)
+pnpm sync:local --recent
 
-# ❌ Vague messages
-git commit -m "publish: updates"
 ```
 
-## 🚨 Troubleshooting
-
-### Common Issues
-
-#### 1. Environment Variables Missing
+### 3. Database Management
 
 ```bash
-# Error: EDITOR_NAME environment variable is required
-# Solution: Check your .env.local file
-cat .env.local | grep EDITOR_NAME
-```
-
-#### 2. Database Connection Failed
-
-```bash
-# Error: Database connection failed
-# Solution: Verify DATABASE_URL format
-echo $DATABASE_URL
-pnpm db:migrate  # Test connection
-```
-
-#### 3. Transliteration API Issues
-
-```bash
-# Error: Google Gemini API key not configured
-# Solution: Check API key configuration
-echo $GOOGLE_GEMINI_API_KEY
-```
-
-#### 4. GitHub Actions Authorization
-
-```bash
-# Error: Unauthorized sync attempt
-# Solution: Check AUTHORIZED_SYNC_USERS secret includes your username
-```
-
-### Debug Commands
-
-```bash
-# Verbose local sync for debugging
-pnpm sync:local --dry-run --verbose
-
-# Check database connection
-pnpm db:status
-
-# Validate content structure
-pnpm validate --verbose
-```
-
-## 📊 Monitoring & Analytics
-
-### Content Statistics
-
-```bash
-# View comprehensive stats
-pnpm stats
-
-# Example output:
-# Languages: 3 (hi, en, ur)
-# Authors: 25
-# Categories: 8
-# Total Articles: 150
-# Published: 142
-# Draft: 8
-```
-
-### Database Health
-
-```bash
-# Check database status
+# Check database health
 pnpm db:health
 
-# View recent sync logs
+# View database status
+pnpm db:status
+
+# Reset database (careful!)
+pnpm db:reset
+```
+
+### 4. Content Operations
+
+```bash
+# Generate content statistics
+pnpm stats
+
+# Validate all content files
+pnpm validate --verbose
+
+# View recent activity
+pnpm logs --recent --limit=20
+
+# View only featured content activity
+pnpm logs --featured
+
+# Update author transliterations
+pnpm db:update-authors --update-mappings
+```
+
+### 5. Development Workflow
+
+```bash
+# Add new content
+vim content/hindi/new-story.md
+
+# Preview changes
+pnpm validate
+pnpm sync:local --dry-run --verbose
+
+# Sync to database
+pnpm sync:local --recent
+
+# Check results
+pnpm stats
 pnpm logs --recent
 ```
 
-## 🔐 Security & Permissions
+### 6. Production Deployment
 
-### GitHub Actions Security
+The system supports automated GitHub Actions deployment:
 
-- **Repository secrets**: Store sensitive data securely
-- **Authorized users only**: Whitelist approach for contributors
-- **Branch protection**: Only `main` branch triggers sync
-- **Environment validation**: Fail fast on missing configurations
+1. **Push content** to your repository
+2. **GitHub Actions** automatically triggers `github-sync.ts`
+3. **Changed files** are processed and synced to production database
+4. **AI transliteration** happens automatically
+5. **Content goes live** with proper SEO slugs
 
-### Database Security
+## 🎯 Key Features
 
-- **Connection encryption**: TLS-enabled database connections
-- **Soft deletes**: Data recovery without permanent loss
-- **Audit trails**: Complete editor and change tracking
+### Multi-Language Support
+- **Hindi, Bengali, Tamil, Telugu, Malayalam, Kannada, Gujarati, Marathi, Punjabi, Odia, Assamese**
+- Custom author mappings for accurate transliterations
+- Language-specific content organization
 
-## 🚀 Deployment
+### Rich Content Metadata
+- **Categories & Sub-categories**: Organize content hierarchically
+- **Tags**: Flexible content labeling
+- **Featured Articles**: Editorial highlighting
+- **Publication Workflow**: Draft → Published states
+- **Audio Support**: Duration and audio file links
 
-### Production Setup
+### Advanced Search & Discovery
+- **Vernacular Search**: Search in original scripts
+- **Transliterated Search**: Search using English keyboard
+- **Full-text Indexing**: Content, titles, authors, categories
+- **Metadata Filtering**: By language, category, author, tags
 
-1. **Database setup**
-   ```sql
-   CREATE DATABASE vernacular_cms;
-   CREATE USER cms_user WITH ENCRYPTED PASSWORD 'secure_password';
-   GRANT ALL PRIVILEGES ON DATABASE vernacular_cms TO cms_user;
-   ```
-
-2. **GitHub secrets configuration**
-   ```bash
-   DATABASE_URL=postgresql://cms_user:secure_password@host:5432/vernacular_cms
-   GOOGLE_GEMINI_API_KEY=your_production_api_key
-   AUTHORIZED_SYNC_USERS=user1,user2,user3
-   ```
-
-3. **Initial migration**
-   ```bash
-   pnpm db:migrate
-   pnpm sync:manual  # Initial content population
-   ```
-
-### Scaling Considerations
-
-- **Database indexing**: Full-text search indexes for performance
-- **API rate limits**: Gemini API batching for transliteration
-- **GitHub Actions limits**: Efficient change detection
-- **Content CDN**: External storage for media files
+### Editorial Tools
+- **Content Validation**: Automatic format checking
+- **Health Monitoring**: Database integrity checks
+- **Activity Logging**: Track all content changes
+- **Statistics Dashboard**: Comprehensive content metrics
+- **Batch Operations**: Bulk content processing
 
 ## 🤝 Contributing
 
-### Development Setup
+1. **Fork** the repository
+2. **Create content** in `content/[language]/` directory
+3. **Follow frontmatter format** as shown in examples
+4. **Test locally** with `pnpm sync:local --dry-run`
+5. **Submit pull request** with descriptive commit messages
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/new-feature`
-3. Make changes and test locally: `pnpm sync:local --changed`
-4. Commit: `git commit -m "Add new feature"`
-5. Push: `git push origin feature/new-feature`
-6. Create Pull Request
+## 📊 Example Usage Stats
 
-### Content Contributions
-
-1. Add content to appropriate language folder
-2. Follow frontmatter schema
-3. Test locally before publishing
-4. Use clear commit messages with "publish:"
+After setup, you'll see comprehensive statistics:
+```
+📚 Content Overview:
+  • Languages: 3
+  • Authors: 15
+  • Categories: 5
+  • Sub-categories: 12
+  • Tags: 45
+  • Total Articles: 150
+  • Published: 120
+  • Featured: 25
+  • Drafts: 30
+```
 
 ## 📞 Support
 
@@ -627,4 +380,4 @@ pnpm logs --recent
 
 ***
 
-**Built with ❤️ for vernacular language preservation and accessibility**
+**Built with ❤️ for preserving and promoting vernacular writtings**
