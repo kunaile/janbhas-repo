@@ -10,12 +10,19 @@
     "db:migrate": "node --env-file=.env.local -r tsx ./src/db/migrate.ts",
     "db:reset": "node --env-file=.env.local -r tsx scripts/reset-database.ts",
     "db:update-authors": "node --env-file=.env.local -r tsx scripts/update-authors.ts",
+    "db:status": "node --env-file=.env.local -r tsx scripts/db-status.ts",
+    "db:health": "node --env-file=.env.local -r tsx scripts/db-health.ts",
     "sync:local": "node --env-file=.env.local -r tsx scripts/local-sync.ts",
     "sync:local:all": "node --env-file=.env.local -r tsx scripts/local-sync.ts --all",
     "sync:local:verbose": "node --env-file=.env.local -r tsx scripts/local-sync.ts --all --verbose",
     "sync:local:dry": "node --env-file=.env.local -r tsx scripts/local-sync.ts --changed --dry-run",
     "sync:manual": "node --env-file=.env.local -r tsx scripts/manual-sync.ts",
-    "sync:github": "node -r tsx scripts/github-sync.ts"
+    "sync:github": "node -r tsx scripts/github-sync.ts",
+    "stats": "node --env-file=.env.local -r tsx scripts/content-stats.ts",
+    "validate": "node --env-file=.env.local -r tsx scripts/validate-content.ts",
+    "logs": "node --env-file=.env.local -r tsx scripts/view-logs.ts",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -25,16 +32,12 @@
     "@google/generative-ai": "^0.24.1",
     "chalk": "^5.5.0",
     "drizzle-orm": "^0.44.4",
-    "express": "^5.1.0",
     "gray-matter": "^4.0.3",
-    "pg": "^8.16.3",
-    "uuid": "^11.1.0"
+    "pg": "^8.16.3"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
     "@types/node": "^24.2.1",
     "@types/pg": "^8.15.5",
-    "@types/uuid": "^10.0.0",
     "drizzle-kit": "^0.31.4",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
