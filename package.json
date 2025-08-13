@@ -10,6 +10,10 @@
     "db:migrate": "node --env-file=.env.local -r tsx ./src/db/migrate.ts",
     "db:reset": "node --env-file=.env.local -r tsx scripts/reset-database.ts",
     "db:update-authors": "node --env-file=.env.local -r tsx scripts/update-authors.ts",
+    "sync:local": "node --env-file=.env.local -r tsx scripts/local-sync.ts",
+    "sync:local:all": "node --env-file=.env.local -r tsx scripts/local-sync.ts --all",
+    "sync:local:verbose": "node --env-file=.env.local -r tsx scripts/local-sync.ts --all --verbose",
+    "sync:local:dry": "node --env-file=.env.local -r tsx scripts/local-sync.ts --changed --dry-run",
     "sync:manual": "node --env-file=.env.local -r tsx scripts/manual-sync.ts",
     "sync:github": "node -r tsx scripts/github-sync.ts"
   },
@@ -19,6 +23,7 @@
   "packageManager": "pnpm@10.5.2",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "chalk": "^5.5.0",
     "drizzle-orm": "^0.44.4",
     "express": "^5.1.0",
     "gray-matter": "^4.0.3",

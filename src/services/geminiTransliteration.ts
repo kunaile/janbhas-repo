@@ -1,95 +1,222 @@
 // src/services/geminiTransliteration.ts
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || '');
 
 export type TransliterationItem = {
     text: string;
-    type: 'title' | 'author';
+    type: 'title' | 'author' | 'category' | 'subcategory' | 'tag';
     language: string;
 };
 
 export type TransliterationResult = {
     original: string;
     transliterated: string;
-    type: 'title' | 'author';
+    type: 'title' | 'author' | 'category' | 'subcategory' | 'tag';
+};
+
+// Rate limiting configuration
+const RATE_LIMIT = {
+    MAX_BATCH_SIZE: 50, // Maximum items per batch
+    MAX_RETRIES: 5,
+    INITIAL_DELAY: 1000, // 1 second
+    MAX_DELAY: 30000, // 30 seconds
+    BACKOFF_MULTIPLIER: 2
 };
 
 /**
- * Post-process transliteration to fix case issues and missing letters
+ * Sleep utility for retry delays
  */
-function cleanTransliterationResult(text: string): string {
-    if (!text || typeof text !== 'string') {
-        return '';
-    }
-
-    // Trim whitespace
-    let cleaned = text.trim();
-
-    // Ensure we have content
-    if (!cleaned) {
-        return '';
-    }
-
-    // Fix common transliteration issues
-    cleaned = cleaned
-        // Fix spacing issues
-        .replace(/\s+/g, ' ')
-        // Remove non-Latin characters except spaces and hyphens
-        .replace(/[^\x00-\x7F\s\-]/g, '')
-        // Remove extra punctuation but keep apostrophes for valid contractions
-        .replace(/[^\w\s\-']/g, ' ')
-        // Fix multiple spaces again after punctuation removal
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    // Ensure consistent lowercase
-    cleaned = cleaned.toLowerCase();
-
-    // Validate that we still have meaningful content
-    if (!cleaned || cleaned.length === 0) {
-        console.warn('Transliteration resulted in empty string after cleaning');
-        return '';
-    }
-
-    return cleaned;
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Enhanced prompt for consistent transliteration
+ * Calculate exponential backoff delay
  */
-function createPrompt(items: TransliterationItem[]): string {
+function calculateBackoffDelay(attempt: number): number {
+    const delay = RATE_LIMIT.INITIAL_DELAY * Math.pow(RATE_LIMIT.BACKOFF_MULTIPLIER, attempt - 1);
+    return Math.min(delay + Math.random() * 1000, RATE_LIMIT.MAX_DELAY); // Add jitter
+}
+
+/**
+ * Create optimized structured prompt for batch transliteration
+ */
+function createStructuredBatchPrompt(items: TransliterationItem[]): string {
+    // Group items by language for better context
+    const itemsByLanguage = items.reduce((acc, item, index) => {
+        if (!acc[item.language]) acc[item.language] = [];
+        acc[item.language].push({ ...item, index });
+        return acc;
+    }, {} as Record<string, Array<TransliterationItem & { index: number }>>);
+
+    const languagePrompts = Object.entries(itemsByLanguage).map(([lang, langItems]) => {
+        const itemList = langItems.map(item =>
+            `${item.index}. ${item.type.toUpperCase()}: "${item.text}"`
+        ).join('\n');
+
+        return `LANGUAGE: ${lang.toUpperCase()}\n${itemList}`;
+    }).join('\n\n');
+
     return `You are an expert in Indian language transliteration. Convert the following texts to accurate English transliteration with proper phonetic pronunciation.
 
 CRITICAL REQUIREMENTS:
 1. ALWAYS start transliterated words with the correct first letter - never omit it
 2. Use proper phonetic accuracy (e.g., "पूस की रात" = "poos ki raat", NOT "puus kii raat")
-3. Use natural word spacing and pronunciation  
+3. Use natural word spacing and pronunciation
 4. For author names, use commonly accepted transliterations if known
-5. Output should be in proper title case initially (we'll handle lowercase conversion)
+5. For categories/subcategories/tags, use simple, clear English equivalents
 6. Each transliteration must be complete - no missing letters or characters
 7. Return ONLY valid JSON array with no additional text or formatting
 
 EXAMPLES OF CORRECT OUTPUT:
-- "प्रेमचंद" should become "Premchand" (not "premchand" or "remchand")
-- "गुल्ली डण्डा" should become "Gulli Danda" (not "gulli damda")
-- "पूस की रात" should become "Poos Ki Raat" (not "puus kii raat")
+- "प्रेमचंद" (author) should become "premchand"
+- "गुल्ली डण्डा" (title) should become "gulli danda"
+- "पूस की रात" (title) should become "poos ki raat"
+- "बाल कथाएँ" (category) should become "children stories"
+- "कविता" (category) should become "poetry"
+- "नैतिक कहानी" (tag) should become "moral story"
 
 INPUT TEXTS:
-${items.map((item, i) => `${i + 1}. ${item.type.toUpperCase()}: "${item.text}" (Language: ${item.language})`).join('\n')}
+${languagePrompts}
 
-REQUIRED JSON OUTPUT FORMAT:
+REQUIRED JSON OUTPUT FORMAT (use lowercase transliterations):
 [
   {
+    "index": 0,
     "original": "original_text",
-    "transliterated": "Proper Title Case Transliteration",
-    "type": "title_or_author"
+    "transliterated": "lowercase transliteration",
+    "type": "title_or_author_or_category_or_subcategory_or_tag"
   }
-]`;
+]
+
+Return ONLY the JSON array, no other text.`;
 }
 
 /**
- * Batch transliterate using Gemini API with enhanced error handling
+ * Process API response and extract results
+ */
+function processApiResponse(response: string, originalItems: TransliterationItem[]): TransliterationResult[] {
+    try {
+        // Extract JSON from response
+        const jsonMatch = response.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            throw new Error('Invalid response format - no JSON array found');
+        }
+
+        const rawResults = JSON.parse(jsonMatch[0]);
+
+        if (!Array.isArray(rawResults)) {
+            throw new Error('Response is not an array');
+        }
+
+        // Validate and clean results
+        const results: TransliterationResult[] = [];
+
+        for (const rawResult of rawResults) {
+            const { index, original, transliterated, type } = rawResult;
+
+            if (typeof index !== 'number' || index < 0 || index >= originalItems.length) {
+                console.warn(`Invalid index in response: ${index}`);
+                continue;
+            }
+
+            const originalItem = originalItems[index];
+
+            if (!transliterated || typeof transliterated !== 'string') {
+                console.warn(`Empty transliteration for: "${originalItem.text}"`);
+                continue;
+            }
+
+            // Clean transliteration
+            const cleaned = transliterated.toLowerCase().trim()
+                .replace(/[^\w\s\-']/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (!cleaned) {
+                console.warn(`Cleaning resulted in empty transliteration for: "${originalItem.text}"`);
+                continue;
+            }
+
+            results.push({
+                original: originalItem.text,
+                transliterated: cleaned,
+                type: originalItem.type
+            });
+        }
+
+        return results;
+    } catch (error) {
+        throw new Error(`Failed to process API response: ${error}`);
+    }
+}
+
+/**
+ * Make API call with retry logic and exponential backoff
+ */
+async function makeApiCallWithRetry(prompt: string, attempt: number = 1): Promise<string> {
+    try {
+        console.log(`[INFO] Making Gemini API call (attempt ${attempt}/${RATE_LIMIT.MAX_RETRIES})`);
+
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash',
+            generationConfig: {
+                temperature: 0.1,
+                topK: 1,
+                topP: 0.8,
+                maxOutputTokens: 8192,
+            },
+        });
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        if (!text || text.trim() === '') {
+            throw new Error('Empty response from Gemini API');
+        }
+
+        return text;
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Check if it's a rate limit or overload error
+        const isRetryableError =
+            errorMessage.includes('503') ||
+            errorMessage.includes('overloaded') ||
+            errorMessage.includes('rate limit') ||
+            errorMessage.includes('429') ||
+            errorMessage.includes('quota');
+
+        if (isRetryableError && attempt < RATE_LIMIT.MAX_RETRIES) {
+            const delay = calculateBackoffDelay(attempt);
+            console.warn(`[WARN] API call failed (attempt ${attempt}): ${errorMessage}`);
+            console.log(`[INFO] Retrying in ${delay}ms...`);
+
+            await sleep(delay);
+            return makeApiCallWithRetry(prompt, attempt + 1);
+        }
+
+        throw error;
+    }
+}
+
+/**
+ * Split items into manageable batches
+ */
+function createBatches<T>(items: T[], batchSize: number): T[][] {
+    const batches: T[][] = [];
+    for (let i = 0;i < items.length;i += batchSize) {
+        batches.push(items.slice(i, i + batchSize));
+    }
+    return batches;
+}
+
+/**
+ * Optimized batch transliteration with single API call per batch
  */
 export async function batchTransliterate(items: TransliterationItem[]): Promise<TransliterationResult[]> {
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
@@ -100,67 +227,109 @@ export async function batchTransliterate(items: TransliterationItem[]): Promise<
         return [];
     }
 
-    console.log(`[INFO] Transliterating ${items.length} items using Gemini API`);
+    console.log(`[INFO] Starting optimized batch transliteration for ${items.length} items`);
 
-    try {
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-1.5-flash',
-            generationConfig: {
-                temperature: 0.1, // Lower temperature for more consistent results
-                topK: 1,
-                topP: 0.8,
-            }
-        });
+    // Split into batches if needed
+    const batches = createBatches(items, RATE_LIMIT.MAX_BATCH_SIZE);
+    const allResults: TransliterationResult[] = [];
 
-        const prompt = createPrompt(items);
+    for (let batchIndex = 0;batchIndex < batches.length;batchIndex++) {
+        const batch = batches[batchIndex];
+        console.log(`[INFO] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} items)`);
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        try {
+            // Create structured prompt for entire batch
+            const prompt = createStructuredBatchPrompt(batch);
 
-        // Extract JSON from response
-        const jsonMatch = text.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-            throw new Error('Invalid response format - no JSON found');
-        }
+            // Make single API call for entire batch
+            const response = await makeApiCallWithRetry(prompt);
 
-        const rawResults = JSON.parse(jsonMatch[0]) as TransliterationResult[];
+            // Process response
+            const batchResults = processApiResponse(response, batch);
+            allResults.push(...batchResults);
 
-        // Validate count
-        if (rawResults.length !== items.length) {
-            throw new Error(`Expected ${items.length} results, got ${rawResults.length}`);
-        }
+            console.log(`[OK] Batch ${batchIndex + 1} completed: ${batchResults.length}/${batch.length} items processed`);
 
-        // Process and clean each result
-        const cleanedResults: TransliterationResult[] = [];
-
-        for (let i = 0;i < items.length;i++) {
-            const item = items[i];
-            const rawResult = rawResults[i];
-
-            if (!rawResult.transliterated || rawResult.transliterated.trim() === '') {
-                throw new Error(`Empty transliteration for: "${item.text}"`);
+            // Add delay between batches to avoid overwhelming the API
+            if (batchIndex < batches.length - 1) {
+                await sleep(1000); // 1 second delay between batches
             }
 
-            // Clean and ensure proper case handling
-            const cleanedTransliteration = cleanTransliterationResult(rawResult.transliterated);
-
-            if (!cleanedTransliteration) {
-                throw new Error(`Cleaning resulted in empty transliteration for: "${item.text}"`);
-            }
-
-            cleanedResults.push({
-                original: item.text,
-                transliterated: cleanedTransliteration,
-                type: item.type
-            });
+        } catch (error) {
+            console.error(`[ERROR] Batch ${batchIndex + 1} failed: ${error}`);
+            throw new Error(`Batch transliteration failed: ${error}`);
         }
-
-        console.log(`[OK] Successfully transliterated and cleaned ${cleanedResults.length} items`);
-        return cleanedResults;
-
-    } catch (error) {
-        console.error(`[ERROR] Gemini transliteration failed: ${error}`);
-        throw new Error(`Transliteration failed: ${error}`);
     }
+
+    console.log(`[OK] Optimized batch transliteration completed: ${allResults.length}/${items.length} items successful`);
+    return allResults;
+}
+
+/**
+ * Legacy function for backward compatibility
+ */
+export async function batchTransliterateTexts(items: TransliterationItem[]): Promise<Map<string, string>> {
+    const results = await batchTransliterate(items);
+
+    const resultMap = new Map<string, string>();
+    for (const result of results) {
+        resultMap.set(result.original, result.transliterated);
+    }
+
+    return resultMap;
+}
+
+/**
+ * Enhanced metadata transliteration with single API call
+ */
+export async function transliterateContentMetadata(
+    categories: string[],
+    subCategories: string[],
+    tags: string[],
+    language: string = 'hi'
+): Promise<{
+    categories: Map<string, string>;
+    subCategories: Map<string, string>;
+    tags: Map<string, string>;
+}> {
+    const items: TransliterationItem[] = [
+        ...categories.map(cat => ({ text: cat, type: 'category' as const, language })),
+        ...subCategories.map(subCat => ({ text: subCat, type: 'subcategory' as const, language })),
+        ...tags.map(tag => ({ text: tag, type: 'tag' as const, language }))
+    ];
+
+    if (items.length === 0) {
+        return {
+            categories: new Map(),
+            subCategories: new Map(),
+            tags: new Map()
+        };
+    }
+
+    // Single API call for all metadata
+    const results = await batchTransliterate(items);
+
+    const categoryMap = new Map<string, string>();
+    const subCategoryMap = new Map<string, string>();
+    const tagMap = new Map<string, string>();
+
+    for (const result of results) {
+        switch (result.type) {
+            case 'category':
+                categoryMap.set(result.original, result.transliterated);
+                break;
+            case 'subcategory':
+                subCategoryMap.set(result.original, result.transliterated);
+                break;
+            case 'tag':
+                tagMap.set(result.original, result.transliterated);
+                break;
+        }
+    }
+
+    return {
+        categories: categoryMap,
+        subCategories: subCategoryMap,
+        tags: tagMap
+    };
 }
