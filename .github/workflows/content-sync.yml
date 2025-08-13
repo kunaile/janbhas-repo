@@ -3,7 +3,7 @@ name: Smart Content Sync
 on:
   push:
     branches: [main]
-    paths: ['content/**']
+    paths: ['content/**/*.md', 'content/**/*.mdx']
 
 permissions:
   contents: read
@@ -146,9 +146,16 @@ jobs:
             echo "🔄 Processing ${{ steps.changes.outputs.total-changes }} files"
             echo "📊 Commit info:"
             echo "  Author: ${{ github.event.head_commit.author.name }}"
+            echo "  Username: ${{ github.event.head_commit.author.username }}"
             echo "  Message: ${{ github.event.head_commit.message }}"
             echo "  Timestamp: ${{ github.event.head_commit.timestamp }}"
             pnpm sync:github
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          NODE_ENV: production
+          COMMIT_AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
+          COMMIT_AUTHOR_USERNAME: ${{ github.event.head_commit.author.username }}
 
       - name: 📊 Report results
         if: always() && steps.changes.outputs.total-changes != '0'
@@ -157,11 +164,14 @@ jobs:
             echo "## ✅ Content Sync Completed" >> $GITHUB_STEP_SUMMARY
             echo "- **Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Username:** ${{ github.event.head_commit.author.username }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Files processed:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
           else
             echo "## ❌ Content Sync Failed" >> $GITHUB_STEP_SUMMARY
             echo "- **Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Username:** ${{ github.event.head_commit.author.username }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Files:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
           fi
@@ -173,6 +183,7 @@ jobs:
           echo "- Commit message: '${{ github.event.head_commit.message }}'"
           echo "- Contains 'publish': ${{ contains(github.event.head_commit.message, 'publish') }}"
           echo "- Author: ${{ github.event.head_commit.author.name }}"
+          echo "- Username: ${{ github.event.head_commit.author.username }}"
           echo "- Changed files count: ${{ steps.changes.outputs.total-changes }}"
           echo "- Environment variables set:"
-          env | grep -E '^(CHANGED_FILES|REMOVED_FILES|RENAMED_FILES)=' || echo "  No change environment variables found"
+          env | grep -E '^(CHANGED_FILES|REMOVED_FILES|RENAMED_FILES|COMMIT_AUTHOR)=' || echo "  No change environment variables found"
