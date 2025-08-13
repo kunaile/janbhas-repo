@@ -58,23 +58,37 @@ export const languagesRelations = relations(languages, ({ many }) => ({
 }));
 
 export const categories = pgTable('categories', {
-    ...baseTable(),
-    name: varchar('name', { length: 255 }).notNull().unique(), // 'Poetry', 'Story'
-});
+  ...baseTable(),
+  name: varchar('name', { length: 255 }).notNull().unique(), // Transliterated
+  localName: varchar('local_name', { length: 255 }), // Local language name
+}, (t) => ({
+  searchIdx: index('categories_search_idx').using('gin',
+    sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
+  ), 
+  // Search index for both language versions
+  nameIdx: index('categories_name_idx').on(t.name),
+  localNameIdx: index('categories_local_name_idx').on(t.localName), // Local name index
+}));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
     articles: many(articles),
     subCategories: many(subCategories),
 }));
 
-// --- New Sub-Categories Table ---
+// --- Sub-Categories Table ---
 export const subCategories = pgTable('sub_categories', {
-    ...baseTable(),
-    name: varchar('name', { length: 255 }).notNull(),
-    categoryId: uuid('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
+  ...baseTable(),
+  name: varchar('name', { length: 255 }).notNull(), // Transliterated
+  localName: varchar('local_name', { length: 255 }), // Local language name
+  categoryId: uuid('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
 }, (t) => ({
-    uniqueSubCategoryIdx: index('sub_categories_unique_idx').on(t.name, t.categoryId),
-    categoryIdx: index('sub_categories_category_idx').on(t.categoryId),
+  searchIdx: index('sub_categories_search_idx').using('gin',
+    sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
+  ), 
+  // Search index for both language versions
+  uniqueSubCategoryIdx: index('sub_categories_unique_idx').on(t.name, t.categoryId),
+  categoryIdx: index('sub_categories_category_idx').on(t.categoryId),
+  localNameIdx: index('sub_categories_local_name_idx').on(t.localName), // Local name index
 }));
 
 export const subCategoriesRelations = relations(subCategories, ({ one, many }) => ({
@@ -85,14 +99,20 @@ export const subCategoriesRelations = relations(subCategories, ({ one, many }) =
     articles: many(articles),
 }));
 
-// --- New Tags Table ---
+// --- Tags Table ---
 export const tags = pgTable('tags', {
-    ...baseTable(),
-    name: varchar('name', { length: 100 }).notNull().unique(),
-    slug: varchar('slug', { length: 100 }).notNull().unique(),
+  ...baseTable(),
+  name: varchar('name', { length: 100 }).notNull().unique(), // Transliterated
+  localName: varchar('local_name', { length: 100 }), // Local language name
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
 }, (t) => ({
-    nameIdx: index('tags_name_idx').on(t.name),
-    slugIdx: index('tags_slug_idx').on(t.slug),
+  searchIdx: index('tags_search_idx').using('gin',
+    sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
+  ), 
+  // Search index for both language versions
+  nameIdx: index('tags_name_idx').on(t.name),
+  slugIdx: index('tags_slug_idx').on(t.slug),
+  localNameIdx: index('tags_local_name_idx').on(t.localName), // Local name index
 }));
 
 export const tagsRelations = relations(tags, ({ many }) => ({

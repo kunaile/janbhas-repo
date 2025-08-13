@@ -19,10 +19,6 @@ export type AuthorData = {
     imageUrl?: string | null;
 };
 
-export type CategoryData = {
-    name: string;        // English name (normalized)
-};
-
 export type LanguageData = {
     name: string;        // English name
     code: string;        // Language code (normalized)
@@ -35,13 +31,20 @@ export type EditorData = {
   githubUserName?: string | null;
 };
 
+export type CategoryData = {
+  name: string; // Transliterated
+  localName?: string | null; // ✅ Add original vernacular
+};
+
 export type SubCategoryData = {
-  name: string;
+  name: string; // Transliterated
+  localName?: string | null; // ✅ Add original vernacular
   categoryId: string;
 };
 
 export type TagData = {
-  name: string;
+  name: string; // Transliterated
+  localName?: string | null; // ✅ Add original vernacular
   slug: string;
 };
 
@@ -128,58 +131,6 @@ export async function findOrCreateEditor(editorData: EditorData): Promise<string
   return newEditor.id;
 }
 
-/**
- * Find or create a sub-category
- */
-export async function findOrCreateSubCategory(subCategoryData: SubCategoryData): Promise<string> {
-  const db = getDb();
-
-  const existing = await db.select()
-    .from(subCategories)
-    .where(and(
-      eq(subCategories.name, subCategoryData.name),
-      eq(subCategories.categoryId, subCategoryData.categoryId),
-      isNull(subCategories.deletedAt)
-    ))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return existing[0].id;
-  }
-
-  const [newSubCategory] = await db.insert(subCategories).values({
-    name: subCategoryData.name,
-    categoryId: subCategoryData.categoryId,
-  }).returning({ id: subCategories.id });
-
-  return newSubCategory.id;
-}
-
-/**
- * Find or create a tag
- */
-export async function findOrCreateTag(tagData: TagData): Promise<string> {
-  const db = getDb();
-
-  const existing = await db.select()
-    .from(tags)
-    .where(and(
-      eq(tags.name, tagData.name),
-      isNull(tags.deletedAt)
-    ))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return existing[0].id;
-  }
-
-  const [newTag] = await db.insert(tags).values({
-    name: tagData.name,
-    slug: tagData.slug,
-  }).returning({ id: tags.id });
-
-  return newTag.id;
-}
 
 /**
  * Create slug from text
@@ -310,27 +261,137 @@ export async function findOrCreateAuthor(authorData: AuthorData): Promise<string
  * Categories are stored in lowercase for consistency
  */
 export async function findOrCreateCategory(categoryData: CategoryData): Promise<string> {
-    const db = getDb();
+  const db = getDb();
 
-    const existingCategory = await db.select()
-        .from(categories)
-        .where(and(
-            eq(categories.name, categoryData.name),
-            isNull(categories.deletedAt)
-        ))
-        .limit(1);
+  // Try to find by transliterated name first
+  const existingByName = await db.select()
+    .from(categories)
+    .where(and(
+      eq(categories.name, categoryData.name),
+      isNull(categories.deletedAt)
+    ))
+    .limit(1);
 
-    if (existingCategory.length > 0) {
-        // Found existing - no creation needed
-        return existingCategory[0].id;
+  if (existingByName.length > 0) {
+    return existingByName[0].id;
+  }
+
+  // Try to find by local name if provided
+  if (categoryData.localName) {
+    const existingByLocalName = await db.select()
+      .from(categories)
+      .where(and(
+        eq(categories.localName, categoryData.localName),
+        isNull(categories.deletedAt)
+      ))
+      .limit(1);
+
+    if (existingByLocalName.length > 0) {
+      return existingByLocalName[0].id;
     }
+  }
 
-    const [newCategory] = await db.insert(categories).values({
-        name: categoryData.name,
-    }).returning({ id: categories.id });
+  // Create new category
+  const [newCategory] = await db.insert(categories).values({
+    name: categoryData.name,
+    localName: categoryData.localName ?? null,
+  }).returning({ id: categories.id });
 
-    console.log(`   🆕 Created new category: ${categoryData.name}`);
-    return newCategory.id;
+  return newCategory.id;
+}
+
+/**
+ * Finds or creates a sub-category record
+ * Sub-categories are linked to categories
+ */
+
+export async function findOrCreateSubCategory(subCategoryData: SubCategoryData): Promise<string> {
+  const db = getDb();
+
+  // Check by transliterated name and category
+  const existingByName = await db.select()
+    .from(subCategories)
+    .where(and(
+      eq(subCategories.name, subCategoryData.name),
+      eq(subCategories.categoryId, subCategoryData.categoryId),
+      isNull(subCategories.deletedAt)
+    ))
+    .limit(1);
+
+  if (existingByName.length > 0) {
+    return existingByName[0].id;
+  }
+
+  // Check by local name if provided
+  if (subCategoryData.localName) {
+    const existingByLocalName = await db.select()
+      .from(subCategories)
+      .where(and(
+        eq(subCategories.localName, subCategoryData.localName),
+        eq(subCategories.categoryId, subCategoryData.categoryId),
+        isNull(subCategories.deletedAt)
+      ))
+      .limit(1);
+
+    if (existingByLocalName.length > 0) {
+      return existingByLocalName[0].id;
+    }
+  }
+
+  // Create new sub-category
+  const [newSubCategory] = await db.insert(subCategories).values({
+    name: subCategoryData.name,
+    localName: subCategoryData.localName ?? null,
+    categoryId: subCategoryData.categoryId,
+  }).returning({ id: subCategories.id });
+
+  return newSubCategory.id;
+}
+
+/**
+ * Finds or creates a tag record
+ * Tags are stored in lowercase for consistency
+ */
+
+export async function findOrCreateTag(tagData: TagData): Promise<string> {
+  const db = getDb();
+
+  // Check by transliterated name
+  const existingByName = await db.select()
+    .from(tags)
+    .where(and(
+      eq(tags.name, tagData.name),
+      isNull(tags.deletedAt)
+    ))
+    .limit(1);
+
+  if (existingByName.length > 0) {
+    return existingByName[0].id;
+  }
+
+  // Check by local name if provided
+  if (tagData.localName) {
+    const existingByLocalName = await db.select()
+      .from(tags)
+      .where(and(
+        eq(tags.localName, tagData.localName),
+        isNull(tags.deletedAt)
+      ))
+      .limit(1);
+
+    if (existingByLocalName.length > 0) {
+      return existingByLocalName[0].id;
+    }
+  }
+
+  // Create new tag
+  const [newTag] = await db.insert(tags).values({
+    name: tagData.name,
+    localName: tagData.localName ?? null,
+    slug: tagData.slug,
+  }).returning({ id: tags.id });
+
+  return newTag.id;
 }
 
 /**

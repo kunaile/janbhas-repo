@@ -15,6 +15,13 @@
       "when": 1755098518990,
       "tag": "0001_rich_scrambler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1755115907565,
+      "tag": "0002_marvelous_cloak",
+      "breakpoints": true
     }
   ]
 }

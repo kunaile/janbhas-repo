@@ -9,13 +9,15 @@ import {
   findOrCreateLanguage,
   findOrCreateEditor,
   findOrCreateSubCategory,
+  findOrCreateTag,
   upsertArticle,
   type AuthorData,
   type CategoryData,
   type LanguageData,
   type ArticleData,
   type EditorData,
-  type SubCategoryData
+  type SubCategoryData,
+  type TagData
 } from './database';
 import { batchTransliterateTexts, normalizeText, getLanguageName } from '../utils/transliteration';
 
@@ -32,6 +34,7 @@ export type Frontmatter = {
   words?: number;
   duration?: string | number;
   published?: boolean;
+  featured?: boolean;
   tags?: string | string[];
 };
 
@@ -41,7 +44,9 @@ export type ProcessedMetadata = {
   filePath: string;
   transliteratedAuthor: string;
   transliteratedTitle: string;
+  transliteratedCategory: string;
   transliteratedSubCategory?: string;
+  transliteratedTags: string[];
   slug: string;
   normalizedLang: string;
   languageName: string;
@@ -63,6 +68,7 @@ export type SyncResult = {
   authors: number;
   categories: number;
   subCategories: number;
+  tags: number;
   articlesProcessed: number;
   errors: number;
   warnings: number;
@@ -135,7 +141,7 @@ export function processTags(tags: string | string[] | undefined): string[] {
   return [];
 }
 
-export function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedSubCategory' | 'slug'> | null {
+export function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedCategory' | 'transliteratedSubCategory' | 'transliteratedTags' | 'slug'> | null {
   try {
     const fileContent = readFileSync(filePath, 'utf8');
     const { data: frontmatter, content: markdownContent } = matter(fileContent);
@@ -190,17 +196,18 @@ export function findMarkdownFiles(dir: string): string[] {
  * Batch process all transliterations using Gemini API
  */
 export async function batchProcessTransliterations(
-  parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedSubCategory' | 'slug'>>
+  parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedCategory' | 'transliteratedSubCategory' | 'transliteratedTags' | 'slug'>>
 ): Promise<ProcessedMetadata[]> {
   log.info('Starting batch transliteration with Gemini API');
 
-  const items: Array<{ text: string; type: 'title' | 'author' | 'subcategory'; language: string }> = [];
+  const items: Array<{ text: string; type: 'title' | 'author' | 'category' | 'subcategory' | 'tag'; language: string }> = [];
 
   // Collect all texts for batch processing
   for (const file of parsedFiles) {
     items.push(
       { text: file.frontmatter.title, type: 'title', language: file.normalizedLang },
-      { text: file.frontmatter.author, type: 'author', language: file.normalizedLang }
+      { text: file.frontmatter.author, type: 'author', language: file.normalizedLang },
+      { text: file.frontmatter.category, type: 'category', language: file.normalizedLang }
     );
 
     // Add sub-category for transliteration if it exists
@@ -208,6 +215,16 @@ export async function batchProcessTransliterations(
       items.push({
         text: file.frontmatter['sub-category'],
         type: 'subcategory',
+        language: file.normalizedLang
+      });
+    }
+
+    // Add tags for transliteration if they exist
+    const tags = processTags(file.frontmatter.tags);
+    for (const tag of tags) {
+      items.push({
+        text: tag,
+        type: 'tag',
         language: file.normalizedLang
       });
     }
@@ -221,11 +238,22 @@ export async function batchProcessTransliterations(
   for (const file of parsedFiles) {
     const transliteratedTitle = results.get(file.frontmatter.title);
     const transliteratedAuthor = results.get(file.frontmatter.author);
+    const transliteratedCategory = results.get(file.frontmatter.category);
     const transliteratedSubCategory = file.frontmatter['sub-category']
       ? results.get(file.frontmatter['sub-category'])
       : undefined;
 
-    if (!transliteratedTitle || !transliteratedAuthor) {
+    // Process transliterated tags
+    const originalTags = processTags(file.frontmatter.tags);
+    const transliteratedTags: string[] = [];
+    for (const tag of originalTags) {
+      const transliteratedTag = results.get(tag);
+      if (transliteratedTag) {
+        transliteratedTags.push(transliteratedTag);
+      }
+    }
+
+    if (!transliteratedTitle || !transliteratedAuthor || !transliteratedCategory) {
       throw new Error(`Transliteration incomplete for ${file.filePath}`);
     }
 
@@ -248,7 +276,9 @@ export async function batchProcessTransliterations(
       ...file,
       transliteratedAuthor,
       transliteratedTitle,
+      transliteratedCategory,
       transliteratedSubCategory,
+      transliteratedTags,
       slug
     });
   }
@@ -258,7 +288,7 @@ export async function batchProcessTransliterations(
 }
 
 /**
- * Populate reference tables (languages, authors, categories, sub-categories)
+ * Populate reference tables (languages, authors, categories, sub-categories, tags)
  */
 export async function populateReferenceTablesFirst(
   processedFiles: ProcessedMetadata[],
@@ -268,6 +298,7 @@ export async function populateReferenceTablesFirst(
   authorMap: Map<string, string>;
   categoryMap: Map<string, string>;
   subCategoryMap: Map<string, string>;
+  tagMap: Map<string, string>;
 }> {
   log.info('PHASE 1: Populating reference tables');
 
@@ -275,26 +306,58 @@ export async function populateReferenceTablesFirst(
   const authorMap = new Map<string, string>();
   const categoryMap = new Map<string, string>();
   const subCategoryMap = new Map<string, string>();
+  const tagMap = new Map<string, string>();
 
   // Extract unique values
   const uniqueLanguages = new Set<string>();
   const uniqueAuthors = new Set<string>();
-  const uniqueCategories = new Set<string>();
-  const uniqueSubCategories = new Set<string>();
+  const uniqueCategories = new Map<string, { original: string; transliterated: string }>();
+  const uniqueSubCategories = new Map<string, { original: string; transliterated: string; categoryOriginal: string }>();
+  const uniqueTags = new Map<string, { original: string; transliterated: string }>();
 
   for (const file of processedFiles) {
     uniqueLanguages.add(file.normalizedLang);
     uniqueAuthors.add(file.frontmatter.author);
-    uniqueCategories.add(normalizeText(file.frontmatter.category));
 
-    // Add sub-category if it exists
+    // Categories with both original and transliterated
+    const categoryKey = file.frontmatter.category;
+    if (!uniqueCategories.has(categoryKey)) {
+      uniqueCategories.set(categoryKey, {
+        original: file.frontmatter.category,
+        transliterated: file.transliteratedCategory
+      });
+    }
+
+    // Sub-categories with both original and transliterated
     if (file.frontmatter['sub-category'] && file.transliteratedSubCategory) {
-      const subCatKey = `${normalizeText(file.frontmatter.category)}|${file.transliteratedSubCategory}`;
-      uniqueSubCategories.add(subCatKey);
+      const subCatKey = `${file.frontmatter.category}|${file.frontmatter['sub-category']}`;
+      if (!uniqueSubCategories.has(subCatKey)) {
+        uniqueSubCategories.set(subCatKey, {
+          original: file.frontmatter['sub-category'],
+          transliterated: file.transliteratedSubCategory,
+          categoryOriginal: file.frontmatter.category
+        });
+      }
+    }
+
+    // Tags with both original and transliterated
+    const originalTags = processTags(file.frontmatter.tags);
+    const transliteratedTags = file.transliteratedTags;
+
+    for (let i = 0;i < originalTags.length;i++) {
+      const originalTag = originalTags[i];
+      const transliteratedTag = transliteratedTags[i];
+
+      if (originalTag && transliteratedTag && !uniqueTags.has(originalTag)) {
+        uniqueTags.set(originalTag, {
+          original: originalTag,
+          transliterated: transliteratedTag
+        });
+      }
     }
   }
 
-  log.info(`Found ${uniqueLanguages.size} languages, ${uniqueAuthors.size} authors, ${uniqueCategories.size} categories, ${uniqueSubCategories.size} sub-categories`);
+  log.info(`Found ${uniqueLanguages.size} languages, ${uniqueAuthors.size} authors, ${uniqueCategories.size} categories, ${uniqueSubCategories.size} sub-categories, ${uniqueTags.size} tags`);
 
   // Process languages
   for (const langCode of uniqueLanguages) {
@@ -308,22 +371,25 @@ export async function populateReferenceTablesFirst(
   }
   log.success('Languages processed');
 
-  // Process categories first
-  for (const category of uniqueCategories) {
-    const categoryData: CategoryData = { name: category };
+  // Process categories with both names
+  for (const [originalCategory, { original, transliterated }] of uniqueCategories) {
+    const categoryData: CategoryData = {
+      name: transliterated,    // Transliterated name
+      localName: original      // Original vernacular name
+    };
     const categoryId = await findOrCreateCategory(categoryData);
-    categoryMap.set(category, categoryId);
+    categoryMap.set(originalCategory, categoryId);
   }
   log.success('Categories processed');
 
-  // Process sub-categories
-  for (const subCatKey of uniqueSubCategories) {
-    const [categoryName, subCategoryName] = subCatKey.split('|');
-    const categoryId = categoryMap.get(categoryName);
+  // Process sub-categories with both names
+  for (const [subCatKey, { original, transliterated, categoryOriginal }] of uniqueSubCategories) {
+    const categoryId = categoryMap.get(categoryOriginal);
 
     if (categoryId) {
       const subCategoryData: SubCategoryData = {
-        name: subCategoryName,
+        name: transliterated,    // Transliterated name
+        localName: original,     // Original vernacular name
         categoryId: categoryId
       };
       const subCategoryId = await findOrCreateSubCategory(subCategoryData);
@@ -331,6 +397,18 @@ export async function populateReferenceTablesFirst(
     }
   }
   log.success('Sub-categories processed');
+
+  // Process tags with both names
+  for (const [originalTag, { original, transliterated }] of uniqueTags) {
+    const tagData: TagData = {
+      name: transliterated,    // Transliterated name
+      localName: original,     // Original vernacular name
+      slug: transliterated.replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    };
+    const tagId = await findOrCreateTag(tagData);
+    tagMap.set(originalTag, tagId);
+  }
+  log.success('Tags processed');
 
   // Process authors
   for (const file of processedFiles) {
@@ -346,7 +424,7 @@ export async function populateReferenceTablesFirst(
   }
   log.success('Authors processed');
 
-  return { languageMap, authorMap, categoryMap, subCategoryMap };
+  return { languageMap, authorMap, categoryMap, subCategoryMap, tagMap };
 }
 
 /**
@@ -358,6 +436,7 @@ export async function processArticles(
   authorMap: Map<string, string>,
   categoryMap: Map<string, string>,
   subCategoryMap: Map<string, string>,
+  tagMap: Map<string, string>,
   editorId: string,
   options: { verbose?: boolean; dryRun?: boolean } = {}
 ): Promise<{ processed: number; errors: number; warnings: number }> {
@@ -371,12 +450,12 @@ export async function processArticles(
       // Get IDs from maps
       const languageId = languageMap.get(file.normalizedLang);
       const authorId = authorMap.get(file.frontmatter.author);
-      const categoryId = categoryMap.get(normalizeText(file.frontmatter.category));
+      const categoryId = categoryMap.get(file.frontmatter.category);
 
       // Get sub-category ID if it exists
       let subCategoryId: string | null = null;
-      if (file.frontmatter['sub-category'] && file.transliteratedSubCategory) {
-        const subCatKey = `${normalizeText(file.frontmatter.category)}|${file.transliteratedSubCategory}`;
+      if (file.frontmatter['sub-category']) {
+        const subCatKey = `${file.frontmatter.category}|${file.frontmatter['sub-category']}`;
         subCategoryId = subCategoryMap.get(subCatKey) || null;
       }
 
@@ -393,8 +472,17 @@ export async function processArticles(
         warnings++;
       }
 
-      // Process tags
-      const tags = processTags(file.frontmatter.tags);
+      // Prepare original and transliterated tags
+      const originalTags = processTags(file.frontmatter.tags);
+
+      // Build tag IDs array for the article
+      const tagIds: string[] = [];
+      for (const originalTag of originalTags) {
+        const tagId = tagMap.get(originalTag);
+        if (tagId) {
+          tagIds.push(tagId);
+        }
+      }
 
       // Create article data
       const articleData: ArticleData = {
@@ -409,13 +497,13 @@ export async function processArticles(
         wordCount: file.frontmatter.words || null,
         duration: duration,
         isPublished: file.frontmatter.published === true,
-        isFeatured: false,
+        isFeatured: file.frontmatter.featured === true,
         languageId,
         categoryId,
         subCategoryId,
         authorId,
         editorId,
-        tags
+        tags: tagIds  // ✅ Pass tag IDs instead of tag names
       };
 
       if (options.verbose) {
@@ -423,6 +511,7 @@ export async function processArticles(
       }
 
       if (!options.dryRun) {
+        // ✅ Fixed: Just upsert the article with tag IDs included
         await upsertArticle(articleData);
       }
 
@@ -452,7 +541,7 @@ export async function syncContent(
   }
 
   // Step 1: Parse markdown files
-  const parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedSubCategory' | 'slug'>> = [];
+  const parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedCategory' | 'transliteratedSubCategory' | 'transliteratedTags' | 'slug'>> = [];
 
   for (const file of files) {
     const parsed = parseMarkdownFile(file);
@@ -475,7 +564,7 @@ export async function syncContent(
   log.success(`Editor processed: ${editorData.name}`);
 
   // Step 4: Populate reference tables
-  const { languageMap, authorMap, categoryMap, subCategoryMap } = await populateReferenceTablesFirst(
+  const { languageMap, authorMap, categoryMap, subCategoryMap, tagMap } = await populateReferenceTablesFirst(
     processedFiles,
     editorId
   );
@@ -487,6 +576,7 @@ export async function syncContent(
     authorMap,
     categoryMap,
     subCategoryMap,
+    tagMap,
     editorId,
     { verbose, dryRun }
   );
@@ -498,6 +588,7 @@ export async function syncContent(
     authors: authorMap.size,
     categories: categoryMap.size,
     subCategories: subCategoryMap.size,
+    tags: tagMap.size,
     articlesProcessed: processed,
     errors,
     warnings

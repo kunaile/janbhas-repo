@@ -96,6 +96,11 @@ async function validateContent() {
           fileIssues.push('Article not marked as published');
         }
 
+        // Featured field validation
+        if (frontmatter.featured && !frontmatter.published) {
+          fileIssues.push('Article marked as featured but not published');
+        }
+
         if (!frontmatter.words) {
           fileIssues.push('No word count specified');
         }
@@ -103,8 +108,8 @@ async function validateContent() {
         // Duration format validation
         if (frontmatter.duration) {
           const duration = frontmatter.duration.toString();
-          if (!duration.match(/^\d+:\d{2}$/) && !duration.match(/^\d+:\d{2}:\d{2}$/)) {
-            fileIssues.push(`Invalid duration format: ${duration} (expected MM:SS or HH:MM:SS)`);
+          if (!duration.match(/^\d+:\d{2}$/) && !duration.match(/^\d+:\d{2}:\d{2}$/) && isNaN(Number(duration))) {
+            fileIssues.push(`Invalid duration format: ${duration} (expected MM:SS, HH:MM:SS, or number)`);
           }
         }
 
@@ -125,12 +130,86 @@ async function validateContent() {
           fileIssues.push('Content seems too short (< 100 characters)');
         }
 
+        // Sub-category validation
+        if (frontmatter['sub-category']) {
+          if (typeof frontmatter['sub-category'] !== 'string' || frontmatter['sub-category'].trim().length === 0) {
+            fileIssues.push('Invalid sub-category format');
+          }
+        }
+
+        // Tags validation
+        if (frontmatter.tags) {
+          if (typeof frontmatter.tags === 'string') {
+            const tags = frontmatter.tags.split(/[,;|]/).map(t => t.trim()).filter(t => t.length > 0);
+            if (tags.length === 0) {
+              fileIssues.push('Tags field present but no valid tags found');
+            }
+          } else if (Array.isArray(frontmatter.tags)) {
+            const validTags = frontmatter.tags.filter(tag =>
+              typeof tag === 'string' && tag.trim().length > 0
+            );
+            if (validTags.length === 0) {
+              fileIssues.push('Tags array present but no valid tags found');
+            }
+          } else {
+            fileIssues.push('Invalid tags format (should be string or array)');
+          }
+        }
+
+        // Featured field type validation
+        if (frontmatter.featured !== undefined && typeof frontmatter.featured !== 'boolean') {
+          fileIssues.push('Featured field should be boolean (true/false)');
+        }
+
+        // Published field type validation
+        if (frontmatter.published !== undefined && typeof frontmatter.published !== 'boolean') {
+          fileIssues.push('Published field should be boolean (true/false)');
+        }
+
+        // Date format validation
+        if (frontmatter.date) {
+          const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+          if (!datePattern.test(frontmatter.date)) {
+            fileIssues.push(`Invalid date format: ${frontmatter.date} (expected YYYY-MM-DD)`);
+          } else {
+            const parsedDate = new Date(frontmatter.date);
+            if (isNaN(parsedDate.getTime())) {
+              fileIssues.push(`Invalid date value: ${frontmatter.date}`);
+            }
+          }
+        }
+
+        // URL validation for thumbnail and audio
+        if (frontmatter.thumbnail) {
+          try {
+            new URL(frontmatter.thumbnail);
+          } catch {
+            fileIssues.push(`Invalid thumbnail URL: ${frontmatter.thumbnail}`);
+          }
+        }
+
+        if (frontmatter.audio) {
+          try {
+            new URL(frontmatter.audio);
+          } catch {
+            fileIssues.push(`Invalid audio URL: ${frontmatter.audio}`);
+          }
+        }
+
+        // Word count validation
+        if (frontmatter.words && (typeof frontmatter.words !== 'number' || frontmatter.words < 0)) {
+          fileIssues.push(`Invalid word count: ${frontmatter.words} (should be positive number)`);
+        }
+
         // Determine status
         const hasErrors = fileIssues.some(issue =>
           issue.includes('Missing required fields') ||
           issue.includes('Failed to parse') ||
           issue.includes('Invalid duration format') ||
-          issue.includes('Unknown language code')
+          issue.includes('Unknown language code') ||
+          issue.includes('Invalid date format') ||
+          issue.includes('Invalid date value') ||
+          issue.includes('Invalid') && !issue.includes('convention')
         );
 
         if (hasErrors) {
@@ -187,12 +266,18 @@ async function validateContent() {
 
     if (errors.length > 0) {
       console.log(`\n❌ Critical Issues (${errors.length}):`);
-      errors.forEach(error => console.log(`  • ${error}`));
+      errors.slice(0, 10).forEach(error => console.log(`  • ${error}`));
+      if (errors.length > 10) {
+        console.log(`  ... and ${errors.length - 10} more errors`);
+      }
     }
 
     if (warnings.length > 0 && options.verbose) {
       console.log(`\n⚠️ Warnings (${warnings.length}):`);
-      warnings.forEach(warning => console.log(`  • ${warning}`));
+      warnings.slice(0, 10).forEach(warning => console.log(`  • ${warning}`));
+      if (warnings.length > 10) {
+        console.log(`  ... and ${warnings.length - 10} more warnings`);
+      }
     }
 
     if (invalidFiles > 0) {
