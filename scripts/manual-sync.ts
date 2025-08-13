@@ -1,4 +1,5 @@
 // scripts/manual-sync.ts
+
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import matter from 'gray-matter';
@@ -7,11 +8,13 @@ import {
     findOrCreateAuthor,
     findOrCreateCategory,
     findOrCreateLanguage,
+    findOrCreateEditor,
     upsertArticle,
     type AuthorData,
     type CategoryData,
     type LanguageData,
-    type ArticleData
+    type ArticleData,
+    type EditorData
 } from '../src/services/database';
 import { batchTransliterateTexts, normalizeText, getLanguageName } from '../src/utils/transliteration';
 
@@ -47,6 +50,23 @@ type ProcessedMetadata = {
     normalizedLang: string;
     languageName: string;
 };
+
+/**
+ * Get editor information from environment variables
+ */
+function getEditorFromEnvironment(): EditorData {
+    const editorName = process.env.EDITOR_NAME;
+    const editorGithubUsername = process.env.EDITOR_GITHUB_USERNAME;
+
+    if (!editorName) {
+        throw new Error('EDITOR_NAME environment variable is required for manual sync');
+    }
+
+    return {
+        name: editorName,
+        githubUserName: editorGithubUsername || null
+    };
+}
 
 function extractShortDescription(markdownContent: string): string {
     const lines = markdownContent
@@ -96,7 +116,7 @@ function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'translite
         const { data: frontmatter, content: markdownContent } = matter(fileContent);
         const fm = frontmatter as Frontmatter;
 
-        // Validate required fields - FIXED: Explicitly type as string[]
+        // Validate required fields
         const missingFields: string[] = [];
         if (!fm.author) missingFields.push('author');
         if (!fm.title) missingFields.push('title');
@@ -117,7 +137,6 @@ function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'translite
             normalizedLang,
             languageName
         };
-
     } catch (error) {
         log.error(`Failed to parse ${filePath}: ${error}`);
         return null;
@@ -126,13 +145,10 @@ function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'translite
 
 function findMarkdownFiles(dir: string): string[] {
     const files: string[] = [];
-
     try {
         const items = readdirSync(dir, { withFileTypes: true });
-
         for (const item of items) {
             const fullPath = join(dir, item.name);
-
             if (item.isDirectory()) {
                 files.push(...findMarkdownFiles(fullPath));
             } else if (item.isFile() && (item.name.endsWith('.md') || item.name.endsWith('.mdx'))) {
@@ -142,20 +158,17 @@ function findMarkdownFiles(dir: string): string[] {
     } catch (error) {
         log.error(`Error reading directory ${dir}: ${error}`);
     }
-
     return files;
 }
 
 /**
  * Batch process all transliterations using Gemini API
- * FIXED: Explicit typing for arrays to avoid TypeScript 'never' errors
  */
 async function batchProcessTransliterations(
     parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'slug'>>
 ): Promise<ProcessedMetadata[]> {
     log.info('Starting batch transliteration with Gemini API');
 
-    // FIXED: Explicitly type the items array to avoid 'never' type error
     const items: Array<{ text: string; type: 'title' | 'author'; language: string }> = [];
 
     // Collect all texts for batch processing
@@ -171,7 +184,6 @@ async function batchProcessTransliterations(
 
     // Apply results back to files
     const processedFiles: ProcessedMetadata[] = [];
-
     for (const file of parsedFiles) {
         const transliteratedTitle = results.get(file.frontmatter.title);
         const transliteratedAuthor = results.get(file.frontmatter.author);
@@ -211,8 +223,14 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
     languageMap: Map<string, string>;
     authorMap: Map<string, string>;
     categoryMap: Map<string, string>;
+    editorId: string;
 }> {
     log.info('PHASE 1: Populating reference tables');
+
+    // Get editor from environment
+    const editorInfo = getEditorFromEnvironment();
+    const editorId = await findOrCreateEditor(editorInfo);
+    log.success(`Editor processed: ${editorInfo.name}`);
 
     const languageMap = new Map<string, string>();
     const authorMap = new Map<string, string>();
@@ -241,6 +259,7 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
         const languageId = await findOrCreateLanguage(languageData);
         languageMap.set(langCode, languageId);
     }
+
     log.success('Languages processed');
 
     // Process authors
@@ -255,6 +274,7 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
             authorMap.set(authorKey, authorId);
         }
     }
+
     log.success('Authors processed');
 
     // Process categories
@@ -263,19 +283,20 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
         const categoryId = await findOrCreateCategory(categoryData);
         categoryMap.set(category, categoryId);
     }
+
     log.success('Categories processed');
 
-    return { languageMap, authorMap, categoryMap };
+    return { languageMap, authorMap, categoryMap, editorId };
 }
 
 async function processArticles(
     processedFiles: ProcessedMetadata[],
     languageMap: Map<string, string>,
     authorMap: Map<string, string>,
-    categoryMap: Map<string, string>
+    categoryMap: Map<string, string>,
+    editorId: string
 ): Promise<{ processed: number; errors: number; warnings: number }> {
     log.info('PHASE 2: Processing articles');
-
     let processed = 0;
     let errors = 0;
     let warnings = 0;
@@ -300,7 +321,7 @@ async function processArticles(
                 warnings++;
             }
 
-            // Create article data
+            // Create article data with editorId
             const articleData: ArticleData = {
                 slug: file.slug,
                 title: file.transliteratedTitle,
@@ -316,12 +337,12 @@ async function processArticles(
                 isFeatured: false,
                 languageId,
                 categoryId,
-                authorId
+                authorId,
+                editorId
             };
 
             await upsertArticle(articleData);
             processed++;
-
         } catch (error) {
             log.alert(`Failed to process article ${file.filePath}: ${error}`);
             errors++;
@@ -335,9 +356,13 @@ async function main() {
     try {
         log.info('Starting manual content sync with Gemini API transliteration');
 
-        // Validate Gemini API key
+        // Validate environment variables
         if (!process.env.GOOGLE_GEMINI_API_KEY) {
             throw new Error('GOOGLE_GEMINI_API_KEY not configured in environment');
+        }
+
+        if (!process.env.EDITOR_NAME) {
+            throw new Error('EDITOR_NAME not configured in environment');
         }
 
         await createDbConnection();
@@ -347,7 +372,6 @@ async function main() {
         const markdownFiles = findMarkdownFiles(contentDir);
         log.info(`Found ${markdownFiles.length} markdown files`);
 
-        // FIXED: Explicitly type the parsedFiles array to avoid 'never' type error
         const parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'slug'>> = [];
 
         // Parse all files
@@ -364,12 +388,12 @@ async function main() {
             throw new Error('No valid files to process');
         }
 
-        // Batch process transliterations - FAIL IF THIS FAILS
+        // Batch process transliterations
         const processedFiles = await batchProcessTransliterations(parsedFiles);
 
-        // Continue with database operations
-        const { languageMap, authorMap, categoryMap } = await populateReferenceTablesFirst(processedFiles);
-        const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap);
+        // Continue with database operations including editor
+        const { languageMap, authorMap, categoryMap, editorId } = await populateReferenceTablesFirst(processedFiles);
+        const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap, editorId);
 
         // Final summary
         console.log('\n' + '='.repeat(50));
@@ -391,7 +415,6 @@ async function main() {
 
         log.success('All files processed successfully');
         process.exit(0);
-
     } catch (error) {
         log.alert(`Manual sync failed: ${error}`);
         process.exit(1);

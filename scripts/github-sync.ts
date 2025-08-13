@@ -8,12 +8,15 @@ import {
     findOrCreateAuthor,
     findOrCreateCategory,
     findOrCreateLanguage,
+    findOrCreateEditor, // Add this
     upsertArticle,
     type AuthorData,
     type CategoryData,
     type LanguageData,
-    type ArticleData
+    type ArticleData,
+    type EditorData // Add this
 } from '../src/services/database';
+
 import { batchTransliterateTexts, normalizeText, getLanguageName } from '../src/utils/transliteration';
 
 const log = {
@@ -52,6 +55,27 @@ type ProcessedMetadata = {
     normalizedLang: string;
     languageName: string;
 };
+
+/**
+ * Get editor information from Git commit
+ */
+function getEditorFromCommit(): EditorData {
+    // These should be set by GitHub Actions
+    const commitAuthor = process.env.COMMIT_AUTHOR_NAME;
+    const commitUsername = process.env.COMMIT_AUTHOR_USERNAME;
+
+    if (!commitAuthor) {
+        throw new Error('COMMIT_AUTHOR_NAME not found in environment');
+    }
+
+    return {
+        name: commitAuthor,
+        githubUserName: commitUsername || null
+    };
+}
+
+
+
 
 /**
  * Get changed files from GitHub Actions environment variables
@@ -223,8 +247,14 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
     languageMap: Map<string, string>;
     authorMap: Map<string, string>;
     categoryMap: Map<string, string>;
+    editorId: string; // Add this
 }> {
     log.info('PHASE 1: Populating reference tables');
+
+    // Get editor from commit info
+    const editorInfo = getEditorFromCommit();
+    const editorId = await findOrCreateEditor(editorInfo);
+    log.success(`Editor processed: ${editorInfo.name}${editorInfo.githubUserName ? ` (${editorInfo.githubUserName})` : ''}`);
 
     const languageMap = new Map<string, string>();
     const authorMap = new Map<string, string>();
@@ -277,14 +307,15 @@ async function populateReferenceTablesFirst(processedFiles: ProcessedMetadata[])
     }
     log.success('Categories processed');
 
-    return { languageMap, authorMap, categoryMap };
+    return { languageMap, authorMap, categoryMap, editorId };
 }
 
 async function processArticles(
     processedFiles: ProcessedMetadata[],
     languageMap: Map<string, string>,
     authorMap: Map<string, string>,
-    categoryMap: Map<string, string>
+    categoryMap: Map<string, string>,
+    editorId: string
 ): Promise<{ processed: number; errors: number; warnings: number }> {
     log.info('PHASE 2: Processing articles');
 
@@ -328,7 +359,8 @@ async function processArticles(
                 isFeatured: false,
                 languageId,
                 categoryId,
-                authorId
+                authorId,
+                editorId
             };
 
             await upsertArticle(articleData);
@@ -380,9 +412,9 @@ async function processChangedFiles(changes: FileChange[]): Promise<void> {
     // Process with Gemini API
     const processedFiles = await batchProcessTransliterations(parsedFiles);
 
-    // **FIXED: Actual database operations**
-    const { languageMap, authorMap, categoryMap } = await populateReferenceTablesFirst(processedFiles);
-    const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap);
+    // main database function call
+    const { languageMap, authorMap, categoryMap, editorId } = await populateReferenceTablesFirst(processedFiles);
+    const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap, editorId);
 
     // Summary
     console.log('\n' + '='.repeat(50));

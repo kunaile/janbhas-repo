@@ -10,11 +10,13 @@ import {
     findOrCreateAuthor,
     findOrCreateCategory,
     findOrCreateLanguage,
+    findOrCreateEditor,
     upsertArticle,
     type AuthorData,
     type CategoryData,
     type LanguageData,
-    type ArticleData
+    type ArticleData,
+    type EditorData
 } from '../src/services/database';
 import { batchTransliterateTexts, normalizeText, getLanguageName } from '../src/utils/transliteration';
 
@@ -60,6 +62,24 @@ type ProcessedMetadata = {
     normalizedLang: string;
     languageName: string;
 };
+
+/**
+ * Get editor information from environment variables
+ */
+function getEditorFromEnvironment(): EditorData {
+    const editorName = process.env.EDITOR_NAME;
+    const editorGithubUsername = process.env.EDITOR_GITHUB_USERNAME;
+
+    if (!editorName) {
+        throw new Error('EDITOR_NAME environment variable is required for local sync');
+    }
+
+    return {
+        name: editorName,
+        githubUserName: editorGithubUsername || null
+    };
+}
+
 
 /**
  * Parse command line arguments
@@ -370,8 +390,8 @@ async function performLocalSync(options: { mode: SyncMode; verbose: boolean; dry
 
     // Database operations
     log.section('Database Operations');
-    const { languageMap, authorMap, categoryMap } = await populateReferenceTablesFirst(processedFiles, options.verbose);
-    const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap, options.verbose);
+    const { languageMap, authorMap, categoryMap, editorId } = await populateReferenceTablesFirst(processedFiles, options.verbose);
+    const { processed, errors, warnings } = await processArticles(processedFiles, languageMap, authorMap, categoryMap, editorId, options.verbose);
 
     // Summary
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -445,8 +465,13 @@ async function batchProcessTransliterations(
 async function populateReferenceTablesFirst(
     processedFiles: ProcessedMetadata[],
     verbose: boolean = false
-): Promise<{ languageMap: Map<string, string>; authorMap: Map<string, string>; categoryMap: Map<string, string> }> {
+): Promise<{ languageMap: Map<string, string>; authorMap: Map<string, string>; categoryMap: Map<string, string>; editorId: string }> {
     log.info('Populating reference tables');
+
+    // Get editor from environment
+    const editorInfo = getEditorFromEnvironment();
+    const editorId = await findOrCreateEditor(editorInfo);
+    log.success(`Editor processed: ${editorInfo.name}`);
 
     const languageMap = new Map<string, string>();
     const authorMap = new Map<string, string>();
@@ -497,7 +522,7 @@ async function populateReferenceTablesFirst(
     }
 
     log.success('Reference tables populated');
-    return { languageMap, authorMap, categoryMap };
+    return { languageMap, authorMap, categoryMap, editorId };
 }
 
 async function processArticles(
@@ -505,6 +530,7 @@ async function processArticles(
     languageMap: Map<string, string>,
     authorMap: Map<string, string>,
     categoryMap: Map<string, string>,
+    editorId: string,
     verbose: boolean = false
 ): Promise<{ processed: number; errors: number; warnings: number }> {
     log.info('Processing articles');
@@ -546,7 +572,8 @@ async function processArticles(
                 isFeatured: false,
                 languageId,
                 categoryId,
-                authorId
+                authorId,
+                editorId
             };
 
             await upsertArticle(articleData);
