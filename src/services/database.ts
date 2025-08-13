@@ -1,4 +1,5 @@
 // src/services/database.ts
+
 /**
  * Database operations service
  * Handles all CRUD operations for content management
@@ -7,6 +8,8 @@
 import { eq, isNull, and, or, desc } from 'drizzle-orm';
 import { getDb } from '../db';
 import { authors, categories, languages, articles } from '../db/schema';
+import { editors } from '../db/schema';
+import { subCategories, tags, articleTags } from '../db/schema';
 
 // Using types instead of interfaces
 export type AuthorData = {
@@ -25,23 +28,249 @@ export type LanguageData = {
     code: string;        // Language code (normalized)
 };
 
-export type ArticleData = {
-    slug: string;
-    title: string;
-    localTitle?: string | null;
-    shortDescription?: string | null;
-    markdownContent: string;
-    publishedDate?: string | null;
-    thumbnailUrl?: string | null;
-    audioUrl?: string | null;
-    wordCount?: number | null;
-    duration?: number | null;
-    isPublished: boolean;
-    isFeatured?: boolean;
-    languageId: string;
-    categoryId?: string | null;
-    authorId?: string | null;
+export type EditorData = {
+  name: string;
+  email?: string | null;
+  imageUrl?: string | null;
+  githubUserName?: string | null;
 };
+
+export type SubCategoryData = {
+  name: string;
+  categoryId: string;
+};
+
+export type TagData = {
+  name: string;
+  slug: string;
+};
+
+export type ArticleData = {
+  slug: string;
+  title: string;
+  localTitle?: string | null;
+  shortDescription?: string | null;
+  markdownContent: string;
+  publishedDate?: string | null;
+  thumbnailUrl?: string | null;
+  audioUrl?: string | null;
+  wordCount?: number | null;
+  duration?: number | null;
+  isPublished: boolean;
+  isFeatured?: boolean;
+  languageId: string;
+  categoryId?: string | null;
+  subCategoryId?: string | null; // Added
+  authorId?: string | null;
+  editorId: string;
+  tags?: string[]; // Array of tag names
+};
+
+/**
+ * Finds or creates an editor record by GitHub username or name
+ * Returns the editor's UUID for foreign key reference
+ */
+export async function findOrCreateEditor(editorData: EditorData): Promise<string> {
+  const db = getDb();
+
+  // First try to find by GitHub username if provided
+  if (editorData.githubUserName) {
+    const existingByGithub = await db.select()
+      .from(editors)
+      .where(and(
+        eq(editors.githubUserName, editorData.githubUserName),
+        isNull(editors.deletedAt)
+      ))
+      .limit(1);
+
+    if (existingByGithub.length > 0) {
+      return existingByGithub[0].id;
+    }
+  }
+
+  // Then try to find by email if provided
+  if (editorData.email) {
+    const existingByEmail = await db.select()
+      .from(editors)
+      .where(and(
+        eq(editors.email, editorData.email),
+        isNull(editors.deletedAt)
+      ))
+      .limit(1);
+
+    if (existingByEmail.length > 0) {
+      return existingByEmail[0].id;
+    }
+  }
+
+  // Then try to find by name
+  const existingByName = await db.select()
+    .from(editors)
+    .where(and(
+      eq(editors.name, editorData.name),
+      isNull(editors.deletedAt)
+    ))
+    .limit(1);
+
+  if (existingByName.length > 0) {
+    return existingByName[0].id;
+  }
+
+  // Create new editor
+  const [newEditor] = await db.insert(editors).values({
+    name: editorData.name,
+    email: editorData.email ?? null,
+    imageUrl: editorData.imageUrl ?? null,
+    githubUserName: editorData.githubUserName ?? null,
+  }).returning({ id: editors.id });
+
+  console.log(`🆕 Created new editor: ${editorData.name}${editorData.githubUserName ? ` (${editorData.githubUserName})` : ''}${editorData.email ? ` <${editorData.email}>` : ''}`);
+  return newEditor.id;
+}
+
+/**
+ * Find or create a sub-category
+ */
+export async function findOrCreateSubCategory(subCategoryData: SubCategoryData): Promise<string> {
+  const db = getDb();
+
+  const existing = await db.select()
+    .from(subCategories)
+    .where(and(
+      eq(subCategories.name, subCategoryData.name),
+      eq(subCategories.categoryId, subCategoryData.categoryId),
+      isNull(subCategories.deletedAt)
+    ))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0].id;
+  }
+
+  const [newSubCategory] = await db.insert(subCategories).values({
+    name: subCategoryData.name,
+    categoryId: subCategoryData.categoryId,
+  }).returning({ id: subCategories.id });
+
+  return newSubCategory.id;
+}
+
+/**
+ * Find or create a tag
+ */
+export async function findOrCreateTag(tagData: TagData): Promise<string> {
+  const db = getDb();
+
+  const existing = await db.select()
+    .from(tags)
+    .where(and(
+      eq(tags.name, tagData.name),
+      isNull(tags.deletedAt)
+    ))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0].id;
+  }
+
+  const [newTag] = await db.insert(tags).values({
+    name: tagData.name,
+    slug: tagData.slug,
+  }).returning({ id: tags.id });
+
+  return newTag.id;
+}
+
+/**
+ * Create slug from text
+ */
+function createSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Process article tags
+ */
+export async function processArticleTags(articleId: string, tagNames: string[]): Promise<void> {
+  const db = getDb();
+
+  if (!tagNames || tagNames.length === 0) return;
+
+  // First, remove existing tags for this article
+  await db.delete(articleTags)
+    .where(eq(articleTags.articleId, articleId));
+
+  // Create or find tags and create relationships
+  for (const tagName of tagNames) {
+    const tagData: TagData = {
+      name: tagName.trim(),
+      slug: createSlug(tagName.trim())
+    };
+
+    const tagId = await findOrCreateTag(tagData);
+
+    await db.insert(articleTags).values({
+      articleId,
+      tagId,
+    });
+  }
+}
+
+
+/**
+ * Find editor by GitHub username
+ */
+export async function findEditorByGithubUsername(githubUsername: string): Promise<string | null> {
+    const db = getDb();
+
+    const existingEditor = await db.select()
+        .from(editors)
+        .where(and(
+            eq(editors.githubUserName, githubUsername),
+            isNull(editors.deletedAt)
+        ))
+        .limit(1);
+
+    return existingEditor.length > 0 ? existingEditor[0].id : null;
+}
+
+/**
+ * Get all editors with article counts
+ */
+export async function getEditorsWithCounts(): Promise<Array<{
+    editor: typeof editors.$inferSelect;
+    articleCount: number;
+}>> {
+    const db = getDb();
+
+    const editors_list = await db.select()
+        .from(editors)
+        .where(isNull(editors.deletedAt));
+
+    const results = [];
+
+    for (const editor of editors_list) {
+        const count = await db.select()
+            .from(articles)
+            .where(and(
+                eq(articles.editorId, editor.id),
+                isNull(articles.deletedAt),
+                eq(articles.isPublished, true)
+            ));
+
+        results.push({
+            editor,
+            articleCount: count.length
+        });
+    }
+
+    return results;
+}
 
 /**
  * Finds or creates an author record
@@ -134,36 +363,60 @@ export async function findOrCreateLanguage(languageData: LanguageData): Promise<
 }
 
 /**
- * Creates or updates an article
- * Uses slug as unique identifier for upsert operations
+ * Updated upsert article with sub-category and tags support
  */
 export async function upsertArticle(articleData: ArticleData): Promise<void> {
-    const db = getDb();
+  const db = getDb();
 
-    const existingArticle = await db.select()
-        .from(articles)
-        .where(and(
-            eq(articles.slug, articleData.slug),
-            isNull(articles.deletedAt)
-        ))
-        .limit(1);
+  // Check if article exists
+  const existing = await db.select()
+    .from(articles)
+    .where(and(
+      eq(articles.slug, articleData.slug),
+      isNull(articles.deletedAt)
+    ))
+    .limit(1);
 
-    if (existingArticle.length > 0) {
-        // Update existing article
-        await db.update(articles)
-            .set({
-                ...articleData,
-                updatedAt: new Date(),
-                deletedAt: null, // Un-delete if previously soft-deleted
-            })
-            .where(eq(articles.id, existingArticle[0].id));
+  const articleValues = {
+    slug: articleData.slug,
+    title: articleData.title,
+    localTitle: articleData.localTitle,
+    shortDescription: articleData.shortDescription,
+    markdownContent: articleData.markdownContent,
+    publishedDate: articleData.publishedDate,
+    thumbnailUrl: articleData.thumbnailUrl,
+    audioUrl: articleData.audioUrl,
+    wordCount: articleData.wordCount,
+    duration: articleData.duration,
+    isPublished: articleData.isPublished,
+    isFeatured: articleData.isFeatured || false,
+    languageId: articleData.languageId,
+    categoryId: articleData.categoryId,
+    subCategoryId: articleData.subCategoryId, // Added
+    authorId: articleData.authorId,
+    editorId: articleData.editorId,
+  };
 
-        console.log(`📝 Updated article: ${articleData.title}`);
-    } else {
-        // Create new article
-        await db.insert(articles).values(articleData);
-        console.log(`✨ Created new article: ${articleData.title}`);
-    }
+  let articleId: string;
+
+  if (existing.length > 0) {
+    // Update existing article
+    await db.update(articles)
+      .set({ ...articleValues, updatedAt: new Date() })
+      .where(eq(articles.id, existing[0].id));
+    articleId = existing[0].id;
+  } else {
+    // Insert new article
+    const [newArticle] = await db.insert(articles)
+      .values(articleValues)
+      .returning({ id: articles.id });
+    articleId = newArticle.id;
+  }
+
+  // Process tags if provided
+  if (articleData.tags && articleData.tags.length > 0) {
+    await processArticleTags(articleId, articleData.tags);
+  }
 }
 
 /**
