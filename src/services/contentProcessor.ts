@@ -1,361 +1,541 @@
 // src/services/contentProcessor.ts
+
+import { readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
 import matter from 'gray-matter';
 import {
-    findOrCreateAuthor,
-    findOrCreateCategory,
-    findOrCreateLanguage,
-    upsertArticle,
-    softDeleteArticle,
-    getAllActiveArticles,
-    type AuthorData,
-    type CategoryData,
-    type LanguageData,
-    type ArticleData
+  findOrCreateAuthor,
+  findOrCreateCategory,
+  findOrCreateLanguage,
+  findOrCreateEditor,
+  findOrCreateSubCategory,
+  upsertArticle,
+  type AuthorData,
+  type CategoryData,
+  type LanguageData,
+  type ArticleData,
+  type EditorData,
+  type SubCategoryData
 } from './database';
-import { transliterateAuthorName, transliterate, generateSlug, normalizeText, getLanguageName } from '../utils/transliteration';
-import { getMarkdownFileContent, type FileChange, type CommitInfo } from './fileProcessor';
+import { batchTransliterateTexts, normalizeText, getLanguageName } from '../utils/transliteration';
 
-// Clean logging utilities
-const log = {
-    info: (msg: string) => console.log(`[INFO] ${msg}`),
-    warn: (msg: string) => console.log(`[WARN] ${msg}`),
-    error: (msg: string) => console.log(`[ERROR] ${msg}`),
-    success: (msg: string) => console.log(`[OK] ${msg}`),
-    alert: (msg: string) => console.log(`[ALERT] ${msg}`)
+// Shared Types
+export type Frontmatter = {
+  author: string;
+  title: string;
+  category: string;
+  'sub-category'?: string;
+  lang: string;
+  date?: string;
+  thumbnail?: string;
+  audio?: string;
+  words?: number;
+  duration?: string | number;
+  published?: boolean;
+  tags?: string | string[];
 };
 
-/**
- * Expected frontmatter structure from markdown files
- */
-type Frontmatter = {
-    author: string;
-    title: string;
-    category: string;
-    lang: string;
-    date?: string;
-    thumbnail?: string;
-    audio?: string;
-    words?: number;
-    duration?: string | number;
-    published?: boolean;
+export type ProcessedMetadata = {
+  frontmatter: Frontmatter;
+  markdownContent: string;
+  filePath: string;
+  transliteratedAuthor: string;
+  transliteratedTitle: string;
+  transliteratedSubCategory?: string;
+  slug: string;
+  normalizedLang: string;
+  languageName: string;
 };
 
-/**
- * Converts duration from MM:SS format to total seconds
- */
-function parseDuration(duration: string | number | undefined): number | null {
-    if (!duration) return null;
+export type EditorSource = 'environment' | 'git-commit';
 
-    if (typeof duration === 'number') return duration;
+export type SyncOptions = {
+  editorSource: EditorSource;
+  editorData?: EditorData;
+  verbose?: boolean;
+  dryRun?: boolean;
+};
 
-    const durationStr = duration.toString().trim();
+export type SyncResult = {
+  totalFiles: number;
+  parsedFiles: number;
+  languages: number;
+  authors: number;
+  categories: number;
+  subCategories: number;
+  articlesProcessed: number;
+  errors: number;
+  warnings: number;
+};
 
-    // Handle MM:SS format (e.g., "09:43")
-    if (durationStr.includes(':')) {
-        const parts = durationStr.split(':');
-        if (parts.length === 2) {
-            const minutes = parseInt(parts[0], 10);
-            const seconds = parseInt(parts[1], 10);
-            if (!isNaN(minutes) && !isNaN(seconds)) {
-                return minutes * 60 + seconds;
-            }
-        }
-        // Handle HH:MM:SS format (e.g., "1:09:43")
-        if (parts.length === 3) {
-            const hours = parseInt(parts[0], 10);
-            const minutes = parseInt(parts[1], 10);
-            const seconds = parseInt(parts[2], 10);
-            if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
-                return hours * 3600 + minutes * 60 + seconds;
-            }
-        }
+// Shared Logging Utilities
+export const log = {
+  info: (msg: string) => console.log(`[INFO] ${msg}`),
+  warn: (msg: string) => console.log(`[WARN] ${msg}`),
+  error: (msg: string) => console.log(`[ERROR] ${msg}`),
+  success: (msg: string) => console.log(`[OK] ${msg}`),
+  alert: (msg: string) => console.log(`[ALERT] ${msg}`)
+};
+
+// Shared Utility Functions
+export function extractShortDescription(markdownContent: string): string {
+  const lines = markdownContent
+    .replace(/^#+\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  const firstParagraph = lines[0] || '';
+  return firstParagraph.length <= 150 ? firstParagraph : firstParagraph.substring(0, 147) + '...';
+}
+
+export function parseDuration(duration: string | number | undefined): number | null {
+  if (!duration) return null;
+  if (typeof duration === 'number') return duration;
+
+  const durationStr = duration.toString();
+  if (durationStr.includes(':')) {
+    const parts = durationStr.split(':');
+    if (parts.length === 2) {
+      const minutes = parseInt(parts[0], 10);
+      const seconds = parseInt(parts[1], 10);
+      if (!isNaN(minutes) && !isNaN(seconds)) {
+        return minutes * 60 + seconds;
+      }
+    }
+    if (parts.length === 3) {
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      const seconds = parseInt(parts[2], 10);
+      if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+        return hours * 3600 + minutes * 60 + seconds;
+      }
+    }
+  }
+
+  const parsed = parseInt(durationStr.replace(/[^\d]/g, ''), 10);
+  return isNaN(parsed) ? null : parsed;
+}
+
+export function processTags(tags: string | string[] | undefined): string[] {
+  if (!tags) return [];
+
+  if (typeof tags === 'string') {
+    return tags.split(/[,;|]/)
+      .map(tag => tag.trim())
+      .filter(tag => tag.length > 0);
+  }
+
+  if (Array.isArray(tags)) {
+    return tags.map(tag => tag.toString().trim()).filter(tag => tag.length > 0);
+  }
+
+  return [];
+}
+
+export function parseMarkdownFile(filePath: string): Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedSubCategory' | 'slug'> | null {
+  try {
+    const fileContent = readFileSync(filePath, 'utf8');
+    const { data: frontmatter, content: markdownContent } = matter(fileContent);
+    const fm = frontmatter as Frontmatter;
+
+    // Validate required fields
+    const missingFields: string[] = [];
+    if (!fm.author) missingFields.push('author');
+    if (!fm.title) missingFields.push('title');
+    if (!fm.lang) missingFields.push('lang');
+    if (!fm.category) missingFields.push('category');
+
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
-    // Handle plain number string
-    const parsed = parseInt(durationStr.replace(/[^\d]/g, ''), 10);
-    return isNaN(parsed) ? null : parsed;
+    const normalizedLang = normalizeText(fm.lang);
+    const languageName = getLanguageName(normalizedLang);
+
+    return {
+      frontmatter: fm,
+      markdownContent,
+      filePath,
+      normalizedLang,
+      languageName
+    };
+  } catch (error) {
+    log.error(`Failed to parse ${filePath}: ${error}`);
+    return null;
+  }
+}
+
+export function findMarkdownFiles(dir: string): string[] {
+  const files: string[] = [];
+  try {
+    const items = readdirSync(dir, { withFileTypes: true });
+    for (const item of items) {
+      const fullPath = join(dir, item.name);
+      if (item.isDirectory()) {
+        files.push(...findMarkdownFiles(fullPath));
+      } else if (item.isFile() && (item.name.endsWith('.md') || item.name.endsWith('.mdx'))) {
+        files.push(fullPath);
+      }
+    }
+  } catch (error) {
+    log.error(`Error reading directory ${dir}: ${error}`);
+  }
+  return files;
 }
 
 /**
- * Extracts a short description from markdown content
+ * Batch process all transliterations using Gemini API
  */
-function extractShortDescription(markdownContent: string): string {
-    if (!markdownContent) return '';
+export async function batchProcessTransliterations(
+  parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedSubCategory' | 'slug'>>
+): Promise<ProcessedMetadata[]> {
+  log.info('Starting batch transliteration with Gemini API');
 
-    const lines = markdownContent
-        .replace(/^#+\s+/gm, '')
-        .replace(/\*\*(.*?)\*\*/g, '$1')
-        .replace(/\*(.*?)\*/g, '$1')
-        .replace(/`(.*?)`/g, '$1')
-        .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
+  const items: Array<{ text: string; type: 'title' | 'author' | 'subcategory'; language: string }> = [];
 
-    const firstParagraph = lines[0] || '';
+  // Collect all texts for batch processing
+  for (const file of parsedFiles) {
+    items.push(
+      { text: file.frontmatter.title, type: 'title', language: file.normalizedLang },
+      { text: file.frontmatter.author, type: 'author', language: file.normalizedLang }
+    );
 
-    if (firstParagraph.length <= 150) {
-        return firstParagraph;
+    // Add sub-category for transliteration if it exists
+    if (file.frontmatter['sub-category']) {
+      items.push({
+        text: file.frontmatter['sub-category'],
+        type: 'subcategory',
+        language: file.normalizedLang
+      });
+    }
+  }
+
+  // Process all transliterations in one batch
+  const results = await batchTransliterateTexts(items);
+
+  // Apply results back to files
+  const processedFiles: ProcessedMetadata[] = [];
+  for (const file of parsedFiles) {
+    const transliteratedTitle = results.get(file.frontmatter.title);
+    const transliteratedAuthor = results.get(file.frontmatter.author);
+    const transliteratedSubCategory = file.frontmatter['sub-category']
+      ? results.get(file.frontmatter['sub-category'])
+      : undefined;
+
+    if (!transliteratedTitle || !transliteratedAuthor) {
+      throw new Error(`Transliteration incomplete for ${file.filePath}`);
     }
 
-    return firstParagraph.substring(0, 147) + '...';
+    // Generate slug
+    const titleSlug = transliteratedTitle
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const authorSlug = transliteratedAuthor
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const slug = `${titleSlug || 'untitled'}_by_${authorSlug || 'unknown'}`;
+
+    processedFiles.push({
+      ...file,
+      transliteratedAuthor,
+      transliteratedTitle,
+      transliteratedSubCategory,
+      slug
+    });
+  }
+
+  log.success(`Batch transliteration completed for ${processedFiles.length} files`);
+  return processedFiles;
 }
 
 /**
- * Validates required frontmatter fields
+ * Populate reference tables (languages, authors, categories, sub-categories)
  */
-function validateFrontmatter(fm: Frontmatter): string[] {
-    const required = ['author', 'title', 'lang', 'category'];
-    const missing: string[] = [];
+export async function populateReferenceTablesFirst(
+  processedFiles: ProcessedMetadata[],
+  editorId: string
+): Promise<{
+  languageMap: Map<string, string>;
+  authorMap: Map<string, string>;
+  categoryMap: Map<string, string>;
+  subCategoryMap: Map<string, string>;
+}> {
+  log.info('PHASE 1: Populating reference tables');
 
-    for (const field of required) {
-        if (!fm[field as keyof Frontmatter]) {
-            missing.push(field);
-        }
+  const languageMap = new Map<string, string>();
+  const authorMap = new Map<string, string>();
+  const categoryMap = new Map<string, string>();
+  const subCategoryMap = new Map<string, string>();
+
+  // Extract unique values
+  const uniqueLanguages = new Set<string>();
+  const uniqueAuthors = new Set<string>();
+  const uniqueCategories = new Set<string>();
+  const uniqueSubCategories = new Set<string>();
+
+  for (const file of processedFiles) {
+    uniqueLanguages.add(file.normalizedLang);
+    uniqueAuthors.add(file.frontmatter.author);
+    uniqueCategories.add(normalizeText(file.frontmatter.category));
+
+    // Add sub-category if it exists
+    if (file.frontmatter['sub-category'] && file.transliteratedSubCategory) {
+      const subCatKey = `${normalizeText(file.frontmatter.category)}|${file.transliteratedSubCategory}`;
+      uniqueSubCategories.add(subCatKey);
     }
+  }
 
-    return missing;
+  log.info(`Found ${uniqueLanguages.size} languages, ${uniqueAuthors.size} authors, ${uniqueCategories.size} categories, ${uniqueSubCategories.size} sub-categories`);
+
+  // Process languages
+  for (const langCode of uniqueLanguages) {
+    const languageName = getLanguageName(langCode);
+    const languageData: LanguageData = {
+      name: languageName,
+      code: langCode
+    };
+    const languageId = await findOrCreateLanguage(languageData);
+    languageMap.set(langCode, languageId);
+  }
+  log.success('Languages processed');
+
+  // Process categories first
+  for (const category of uniqueCategories) {
+    const categoryData: CategoryData = { name: category };
+    const categoryId = await findOrCreateCategory(categoryData);
+    categoryMap.set(category, categoryId);
+  }
+  log.success('Categories processed');
+
+  // Process sub-categories
+  for (const subCatKey of uniqueSubCategories) {
+    const [categoryName, subCategoryName] = subCatKey.split('|');
+    const categoryId = categoryMap.get(categoryName);
+
+    if (categoryId) {
+      const subCategoryData: SubCategoryData = {
+        name: subCategoryName,
+        categoryId: categoryId
+      };
+      const subCategoryId = await findOrCreateSubCategory(subCategoryData);
+      subCategoryMap.set(subCatKey, subCategoryId);
+    }
+  }
+  log.success('Sub-categories processed');
+
+  // Process authors
+  for (const file of processedFiles) {
+    const authorKey = file.frontmatter.author;
+    if (!authorMap.has(authorKey)) {
+      const authorData: AuthorData = {
+        name: file.transliteratedAuthor,
+        localName: file.frontmatter.author
+      };
+      const authorId = await findOrCreateAuthor(authorData);
+      authorMap.set(authorKey, authorId);
+    }
+  }
+  log.success('Authors processed');
+
+  return { languageMap, authorMap, categoryMap, subCategoryMap };
 }
 
 /**
- * Processes a single markdown file and updates the database
- * UPDATED: Now handles async transliteration
+ * Process articles and upsert to database
  */
-export async function processMarkdownFile(filename: string): Promise<boolean> {
+export async function processArticles(
+  processedFiles: ProcessedMetadata[],
+  languageMap: Map<string, string>,
+  authorMap: Map<string, string>,
+  categoryMap: Map<string, string>,
+  subCategoryMap: Map<string, string>,
+  editorId: string,
+  options: { verbose?: boolean; dryRun?: boolean } = {}
+): Promise<{ processed: number; errors: number; warnings: number }> {
+  log.info('PHASE 2: Processing articles');
+  let processed = 0;
+  let errors = 0;
+  let warnings = 0;
+
+  for (const file of processedFiles) {
     try {
-        log.info(`Processing: ${filename}`);
+      // Get IDs from maps
+      const languageId = languageMap.get(file.normalizedLang);
+      const authorId = authorMap.get(file.frontmatter.author);
+      const categoryId = categoryMap.get(normalizeText(file.frontmatter.category));
 
-        const fileContent = getMarkdownFileContent(filename);
-        if (!fileContent) {
-            log.error(`Could not read file: ${filename}`);
-            return false;
-        }
+      // Get sub-category ID if it exists
+      let subCategoryId: string | null = null;
+      if (file.frontmatter['sub-category'] && file.transliteratedSubCategory) {
+        const subCatKey = `${normalizeText(file.frontmatter.category)}|${file.transliteratedSubCategory}`;
+        subCategoryId = subCategoryMap.get(subCatKey) || null;
+      }
 
-        // Parse frontmatter and content
-        const { data: frontmatter, content: markdownContent } = matter(fileContent);
-        const fm = frontmatter as Frontmatter;
+      if (!languageId || !authorId || !categoryId) {
+        log.warn(`Missing reference IDs for ${file.filePath}`);
+        warnings++;
+        continue;
+      }
 
-        // Validate required fields
-        const missingFields = validateFrontmatter(fm);
-        if (missingFields.length > 0) {
-            log.warn(`Missing required fields in ${filename}: ${missingFields.join(', ')}`);
-            return false;
-        }
+      // Parse duration properly
+      const duration = parseDuration(file.frontmatter.duration);
+      if (file.frontmatter.duration && duration === null) {
+        log.warn(`Invalid duration format in ${file.filePath}: ${file.frontmatter.duration}`);
+        warnings++;
+      }
 
-        // Process metadata
-        const normalizedLang = normalizeText(fm.lang);
-        const languageName = getLanguageName(normalizedLang);
+      // Process tags
+      const tags = processTags(file.frontmatter.tags);
 
-        // UPDATED: Use async transliteration with Promise.all for better performance
-        const [transliteratedAuthor, transliteratedTitle] = await Promise.all([
-            transliterateAuthorName(fm.author, normalizedLang),
-            transliterate(fm.title, { lang: normalizedLang })
-        ]);
+      // Create article data
+      const articleData: ArticleData = {
+        slug: file.slug,
+        title: file.transliteratedTitle,
+        localTitle: file.frontmatter.title,
+        shortDescription: extractShortDescription(file.markdownContent),
+        markdownContent: file.markdownContent,
+        publishedDate: file.frontmatter.date ? new Date(file.frontmatter.date).toISOString().split('T')[0] : null,
+        thumbnailUrl: file.frontmatter.thumbnail || null,
+        audioUrl: file.frontmatter.audio || null,
+        wordCount: file.frontmatter.words || null,
+        duration: duration,
+        isPublished: file.frontmatter.published === true,
+        isFeatured: false,
+        languageId,
+        categoryId,
+        subCategoryId,
+        authorId,
+        editorId,
+        tags
+      };
 
-        const slug = await generateSlug(fm.title, fm.author, normalizedLang);
+      if (options.verbose) {
+        log.info(`Processing: ${file.frontmatter.title} by ${file.frontmatter.author}`);
+      }
 
-        // Parse duration properly
-        const duration = parseDuration(fm.duration);
-        if (fm.duration && duration === null) {
-            log.warn(`Invalid duration format in ${filename}: ${fm.duration}`);
-        }
-
-        // Create/find language record
-        const languageData: LanguageData = {
-            name: languageName,
-            code: normalizedLang,
-        };
-        const languageId = await findOrCreateLanguage(languageData);
-
-        // Create/find author record
-        const authorData: AuthorData = {
-            name: transliteratedAuthor,
-            localName: fm.author
-        };
-        const authorId = await findOrCreateAuthor(authorData);
-
-        // Create/find category record  
-        const categoryData: CategoryData = {
-            name: normalizeText(fm.category)
-        };
-        const categoryId = await findOrCreateCategory(categoryData);
-
-        // Prepare article data
-        const articleData: ArticleData = {
-            slug,
-            title: transliteratedTitle,
-            localTitle: fm.title,
-            shortDescription: extractShortDescription(markdownContent),
-            markdownContent,
-            publishedDate: fm.date ? new Date(fm.date).toISOString().split('T')[0] : null,
-            thumbnailUrl: fm.thumbnail || null,
-            audioUrl: fm.audio || null,
-            wordCount: fm.words || null,
-            duration: duration,
-            isPublished: fm.published === true,
-            isFeatured: false,
-            languageId,
-            categoryId,
-            authorId
-        };
-
-        // Create or update article
+      if (!options.dryRun) {
         await upsertArticle(articleData);
+      }
 
-        log.success(`Processed: ${fm.title} by ${fm.author}`);
-        return true;
-
+      processed++;
     } catch (error) {
-        log.error(`Error processing ${filename}: ${error}`);
-        return false;
+      log.alert(`Failed to process article ${file.filePath}: ${error}`);
+      errors++;
     }
+  }
+
+  return { processed, errors, warnings };
 }
 
 /**
- * Processes all file changes from commits
- * UPDATED: Handles async transliteration
+ * Main content sync function that orchestrates the entire process
  */
-export async function processCommitChanges(commits: CommitInfo[]): Promise<void> {
-    const processedSlugs = new Set<string>();
-    let totalProcessed = 0;
-    let totalErrors = 0;
-    let totalWarnings = 0;
+export async function syncContent(
+  files: string[],
+  editorData: EditorData,
+  options: { verbose?: boolean; dryRun?: boolean } = {}
+): Promise<SyncResult> {
+  const { verbose = false, dryRun = false } = options;
 
-    log.info(`Processing ${commits.length} commits`);
+  if (verbose) {
+    log.info(`Starting content sync for ${files.length} files`);
+    if (dryRun) log.info('DRY RUN MODE - No database changes will be made');
+  }
 
-    for (const commit of commits) {
-        log.info(`Processing commit by ${commit.username}: ${commit.message.substring(0, 50)}...`);
+  // Step 1: Parse markdown files
+  const parsedFiles: Array<Omit<ProcessedMetadata, 'transliteratedAuthor' | 'transliteratedTitle' | 'transliteratedSubCategory' | 'slug'>> = [];
 
-        for (const fileChange of commit.files) {
-            try {
-                if (fileChange.status === 'removed') {
-                    await handleFileRemoval(fileChange.filename, commit.username);
-                } else {
-                    const success = await processMarkdownFile(fileChange.filename);
-                    if (success) {
-                        const fileContent = getMarkdownFileContent(fileChange.filename);
-                        if (fileContent) {
-                            const { data } = matter(fileContent);
-                            if (data.title && data.author) {
-                                const slug = await generateSlug(data.title, data.author, data.lang || 'hi');
-                                processedSlugs.add(slug);
-                            }
-                        }
-                        totalProcessed++;
-                    } else {
-                        totalWarnings++;
-                    }
-                }
-            } catch (error) {
-                log.alert(`Failed to process file ${fileChange.filename}: ${error}`);
-                totalErrors++;
-            }
-        }
+  for (const file of files) {
+    const parsed = parseMarkdownFile(file);
+    if (parsed) {
+      parsedFiles.push(parsed);
     }
+  }
 
-    // Final summary
-    log.info('Processing summary:');
-    log.success(`Articles processed: ${totalProcessed}`);
-    if (totalWarnings > 0) {
-        log.warn(`Warnings: ${totalWarnings} (missing/invalid fields)`);
-    }
-    if (totalErrors > 0) {
-        log.alert(`Errors: ${totalErrors} (processing failures)`);
-    }
+  if (parsedFiles.length === 0) {
+    throw new Error('No valid files to process');
+  }
+
+  log.info(`Successfully parsed ${parsedFiles.length}/${files.length} files`);
+
+  // Step 2: Batch process transliterations
+  const processedFiles = await batchProcessTransliterations(parsedFiles);
+
+  // Step 3: Create or find editor
+  const editorId = await findOrCreateEditor(editorData);
+  log.success(`Editor processed: ${editorData.name}`);
+
+  // Step 4: Populate reference tables
+  const { languageMap, authorMap, categoryMap, subCategoryMap } = await populateReferenceTablesFirst(
+    processedFiles,
+    editorId
+  );
+
+  // Step 5: Process articles
+  const { processed, errors, warnings } = await processArticles(
+    processedFiles,
+    languageMap,
+    authorMap,
+    categoryMap,
+    subCategoryMap,
+    editorId,
+    { verbose, dryRun }
+  );
+
+  return {
+    totalFiles: files.length,
+    parsedFiles: parsedFiles.length,
+    languages: languageMap.size,
+    authors: authorMap.size,
+    categories: categoryMap.size,
+    subCategories: subCategoryMap.size,
+    articlesProcessed: processed,
+    errors,
+    warnings
+  };
 }
 
 /**
- * Handles file removal by soft deleting the corresponding article
+ * Get editor information from environment variables
  */
-async function handleFileRemoval(filename: string, deletedByUsername: string): Promise<void> {
-    try {
-        log.info(`File removed: ${filename} by ${deletedByUsername}`);
-        // Future enhancement: implement proper article identification and soft delete
-    } catch (error) {
-        log.error(`Error handling file removal ${filename}: ${error}`);
-    }
+export function getEditorFromEnvironment(): EditorData {
+  const editorName = process.env.EDITOR_NAME;
+  const editorEmail = process.env.EDITOR_EMAIL;
+  const editorGithubUsername = process.env.EDITOR_GITHUB_USERNAME;
+
+  if (!editorName) {
+    throw new Error('EDITOR_NAME environment variable is required');
+  }
+
+  return {
+    name: editorName,
+    email: editorEmail || null,
+    githubUserName: editorGithubUsername || null
+  };
 }
 
 /**
- * Batch processes multiple markdown files
- * UPDATED: Handles async transliteration
+ * Get editor information from Git commit
  */
-export async function batchProcessMarkdownFiles(filePaths: string[]): Promise<{
-    processed: number;
-    errors: number;
-    warnings: number;
-}> {
-    let processed = 0;
-    let errors = 0;
-    let warnings = 0;
+export function getEditorFromCommit(): EditorData {
+  const commitAuthor = process.env.COMMIT_AUTHOR_NAME;
+  const commitUsername = process.env.COMMIT_AUTHOR_USERNAME;
 
-    log.info(`Batch processing ${filePaths.length} files`);
+  if (!commitAuthor) {
+    throw new Error('COMMIT_AUTHOR_NAME not found in environment');
+  }
 
-    for (const filePath of filePaths) {
-        try {
-            const success = await processMarkdownFile(filePath);
-            if (success) {
-                processed++;
-            } else {
-                warnings++;
-            }
-        } catch (error) {
-            log.alert(`Batch processing failed for ${filePath}: ${error}`);
-            errors++;
-        }
-    }
-
-    return { processed, errors, warnings };
-}
-
-/**
- * Validates all markdown files in a directory
- */
-export async function validateMarkdownFiles(filePaths: string[]): Promise<{
-    validFiles: string[];
-    invalidFiles: Array<{ file: string; issues: string[] }>;
-}> {
-    const validFiles: string[] = [];
-    const invalidFiles: Array<{ file: string; issues: string[] }> = [];
-
-    for (const filePath of filePaths) {
-        try {
-            const fileContent = getMarkdownFileContent(filePath);
-            if (!fileContent) {
-                invalidFiles.push({
-                    file: filePath,
-                    issues: ['Could not read file']
-                });
-                continue;
-            }
-
-            const { data: frontmatter } = matter(fileContent);
-            const fm = frontmatter as Frontmatter;
-
-            const missingFields = validateFrontmatter(fm);
-            const issues: string[] = [];
-
-            if (missingFields.length > 0) {
-                issues.push(`Missing fields: ${missingFields.join(', ')}`);
-            }
-
-            if (fm.duration && parseDuration(fm.duration) === null) {
-                issues.push(`Invalid duration format: ${fm.duration}`);
-            }
-
-            if (issues.length > 0) {
-                invalidFiles.push({ file: filePath, issues });
-            } else {
-                validFiles.push(filePath);
-            }
-
-        } catch (error) {
-            invalidFiles.push({
-                file: filePath,
-                issues: [`Parse error: ${error}`]
-            });
-        }
-    }
-
-    return { validFiles, invalidFiles };
+  return {
+    name: commitAuthor,
+    githubUserName: commitUsername || null
+  };
 }
