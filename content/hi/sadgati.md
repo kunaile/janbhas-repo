@@ -2,12 +2,14 @@
 title: सद्गति
 author: प्रेमचंद
 lang: hi
-category: Short Story
-date: 7-jul-2025
+category: कहानी
+date: 2025-08-17
 thumbnail: https://image-cdn-fa.spotifycdn.com/image/ab67656300005f1f67373683b819b2e9538f1464
 audio: https://open.spotify.com/embed/episode/5XLVTLvotXoOmThaDSqVif
 words: 2762
 duration: 21:14
+published: true
+featured: true
 ---
 
 दुखी चमार द्वार पर झाडू लगा रहा था और उसकी पत्नी झुरिया, घर को गोबर से लीप रही थी। दोनों अपने-अपने काम से फुरसत पा चुके थे, तो चमारिन ने कहा,

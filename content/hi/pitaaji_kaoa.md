@@ -2,12 +2,14 @@
 author: गिजुभाई बधेका
 title: पिताजी! कौआ
 lang: hi
-category: short story
-date: 
+category: लघु कथा
+date: 2025-08-17
 thumbnail: https://image-cdn-fa.spotifycdn.com/image/ab67656300005f1f0402a88aa3d16e1ee36f1fd7
 audio: https://open.spotify.com/embed/episode/2d71d9UEZBuDWUUpo80sJy
 words: "1009"
 duration: 07:52
+published: true
+featured: true
 ---
 
 एक व्यापारी था। उसके छह सात साल का एक लड़का था। लड़का बहुत ही प्यारा था और दिन भर बाप से कुछ न कुछ पूछता रहता था। वह रोज बाप के साथ दुकान जाता, और कोई न कोई बात पूछता रहता। व्यापारी इतने शांत स्वभाव का था कि बेटे को खुश रखने के लिए उसके सवालों के जवाब देता रहता था। वह अपने प्यारे बेटे को कभी नाराज नहीं करता था। कभी उस पर गुस्सा नहीं होता था। बेटा जो भी चाहता, बाप वही करता।
