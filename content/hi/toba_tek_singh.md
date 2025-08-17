@@ -7,7 +7,7 @@ sub-category: व्यंग्य
 date: 7-jul-2025
 thumbnail:
 audio:
-words: 2,595
+words: 2595
 published: true
 ---
 

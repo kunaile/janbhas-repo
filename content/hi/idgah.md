@@ -6,7 +6,7 @@ category: कहानी
 date: 
 thumbnail: 
 audio:
-words: 4,866
+words: 4866
 published: true
 ---
 

@@ -17,31 +17,100 @@ const LANGUAGE_NAMES: Record<string, string> = {
   'en': 'English'
 };
 
-const authorMappingCache: Map<string, Record<string, string>> = new Map();
+// Enhanced caching system for all mapping types
+const mappingCaches = {
+  author: new Map<string, Record<string, string>>(),
+  category: new Map<string, Record<string, string>>(),
+  subcategory: new Map<string, Record<string, string>>(),
+  tag: new Map<string, Record<string, string>>()
+};
 
-function loadAuthorMappings(langCode: string): Record<string, string> {
-  if (authorMappingCache.has(langCode)) {
-    return authorMappingCache.get(langCode)!;
+/**
+ * Generic mapping loader for all types
+ */
+function loadMappings(
+  type: 'author' | 'category' | 'subcategory' | 'tag',
+  langCode: string
+): Record<string, string> {
+  const cache = mappingCaches[type];
+
+  if (cache.has(langCode)) {
+    return cache.get(langCode)!;
   }
 
   try {
-    const mappingFile = join(__dirname, '../data', `author-mappings.${langCode}.json`);
+    const mappingFile = join(__dirname, '../data', `${type}-mappings.${langCode}.json`);
     const fileContent = readFileSync(mappingFile, 'utf8');
     const mappingData = JSON.parse(fileContent);
-    const mappings = mappingData.author_mappings || {};
-    authorMappingCache.set(langCode, mappings);
+    const mappings = mappingData[`${type}_mappings`] || {};
+
+    cache.set(langCode, mappings);
+    console.log(`[INFO] Loaded ${Object.keys(mappings).length} ${type} mappings for ${langCode}`);
+
     return mappings;
   } catch (error) {
-    console.warn(`[WARN] Could not load author mappings for ${langCode}`);
+    console.warn(`[WARN] Could not load ${type} mappings for ${langCode}: ${error}`);
     const emptyMappings = {};
-    authorMappingCache.set(langCode, emptyMappings);
+    cache.set(langCode, emptyMappings);
     return emptyMappings;
   }
 }
 
 /**
- * Enhanced batch transliteration with consistent case handling
- * UPDATED: Now supports all types (title, author, category, subcategory, tag)
+ * Specific loader functions
+ */
+function loadAuthorMappings(langCode: string): Record<string, string> {
+  return loadMappings('author', langCode);
+}
+
+function loadCategoryMappings(langCode: string): Record<string, string> {
+  return loadMappings('category', langCode);
+}
+
+function loadSubcategoryMappings(langCode: string): Record<string, string> {
+  return loadMappings('subcategory', langCode);
+}
+
+function loadTagMappings(langCode: string): Record<string, string> {
+  return loadMappings('tag', langCode);
+}
+
+/**
+ * Check for existing mapping based on type
+ */
+function checkExistingMapping(
+  item: { text: string; type: 'title' | 'author' | 'category' | 'subcategory' | 'tag'; language: string }
+): string | null {
+  if (item.type === 'title') {
+    return null; // Titles should always be transliterated fresh
+  }
+
+  let mappings: Record<string, string> = {};
+
+  switch (item.type) {
+    case 'author':
+      mappings = loadAuthorMappings(item.language);
+      break;
+    case 'category':
+      mappings = loadCategoryMappings(item.language);
+      break;
+    case 'subcategory':
+      mappings = loadSubcategoryMappings(item.language);
+      break;
+    case 'tag':
+      mappings = loadTagMappings(item.language);
+      break;
+  }
+
+  // Check both original text and cleaned version
+  const cleanName = item.text.replace(/[''"]/g, '').trim();
+  const mapping = mappings[item.text] || mappings[cleanName];
+
+  return mapping ? mapping.toLowerCase() : null;
+}
+
+/**
+ * Enhanced batch transliteration with consistent mapping support for all types
  */
 export async function batchTransliterateTexts(
   items: Array<{ text: string; type: 'title' | 'author' | 'category' | 'subcategory' | 'tag'; language: string }>
@@ -52,20 +121,16 @@ export async function batchTransliterateTexts(
     return results;
   }
 
-  // Check custom author mappings first (only for authors)
+  // Check existing mappings for all supported types
   const itemsToProcess: TransliterationItem[] = [];
 
   for (const item of items) {
-    if (item.type === 'author') {
-      const mappings = loadAuthorMappings(item.language);
-      const cleanName = item.text.replace(/[''"]/g, '');
+    const existingMapping = checkExistingMapping(item);
 
-      if (mappings[item.text] || mappings[cleanName]) {
-        const mapped = mappings[item.text] || mappings[cleanName];
-        results.set(item.text, mapped.toLowerCase()); // Ensure lowercase
-        console.log(`[OK] Used custom mapping: ${item.text} -> ${mapped.toLowerCase()}`);
-        continue;
-      }
+    if (existingMapping) {
+      results.set(item.text, existingMapping);
+      console.log(`[OK] Used ${item.type} mapping: ${item.text} -> ${existingMapping}`);
+      continue;
     }
 
     itemsToProcess.push(item);
@@ -77,10 +142,11 @@ export async function batchTransliterateTexts(
 
   // Process remaining items with Gemini API
   try {
+    console.log(`[INFO] Processing ${itemsToProcess.length} items with Gemini API (${items.length - itemsToProcess.length} used mappings)`);
+
     const geminiResults = await batchTransliterate(itemsToProcess);
 
     for (const result of geminiResults) {
-      // Ensure all results are lowercase and properly formatted
       const finalResult = result.transliterated.toLowerCase().trim();
 
       if (!finalResult) {
@@ -88,7 +154,7 @@ export async function batchTransliterateTexts(
       }
 
       results.set(result.original, finalResult);
-      console.log(`[OK] Transliterated: "${result.original}" -> "${finalResult}"`);
+      console.log(`[OK] Transliterated ${result.type}: "${result.original}" -> "${finalResult}"`);
     }
 
     return results;
@@ -100,8 +166,37 @@ export async function batchTransliterateTexts(
 }
 
 /**
- * Single text transliteration
- * UPDATED: Now supports all types
+ * Batch transliterate with mapping suggestions
+ */
+export async function batchTransliterateWithSuggestions(
+  items: Array<{ text: string; type: 'title' | 'author' | 'category' | 'subcategory' | 'tag'; language: string }>
+): Promise<{
+  results: Map<string, string>;
+  suggestions: Array<{ type: string; language: string; original: string; suggested: string }>;
+}> {
+  const results = await batchTransliterateTexts(items);
+  const suggestions: Array<{ type: string; language: string; original: string; suggested: string }> = [];
+
+  // Generate suggestions for new mappings
+  for (const item of items) {
+    if (item.type !== 'title') { // Don't suggest mappings for titles
+      const existingMapping = checkExistingMapping(item);
+      if (!existingMapping && results.has(item.text)) {
+        suggestions.push({
+          type: item.type,
+          language: item.language,
+          original: item.text,
+          suggested: results.get(item.text)!
+        });
+      }
+    }
+  }
+
+  return { results, suggestions };
+}
+
+/**
+ * Enhanced individual transliteration functions
  */
 export async function transliterate(
   text: string,
@@ -124,80 +219,20 @@ export async function transliterate(
   return result;
 }
 
-/**
- * Author name transliteration
- */
 export async function transliterateAuthorName(authorName: string, langCode: string = 'hi'): Promise<string> {
-  if (!authorName || typeof authorName !== 'string') {
-    throw new Error(`Invalid author name: "${authorName}"`);
-  }
-
-  const items = [{ text: authorName, type: 'author' as const, language: langCode }];
-  const results = await batchTransliterateTexts(items);
-
-  const result = results.get(authorName);
-  if (!result) {
-    throw new Error(`Author transliteration failed for: "${authorName}"`);
-  }
-
-  return result;
+  return transliterate(authorName, { lang: langCode, type: 'author' });
 }
 
-/**
- * NEW: Category transliteration
- */
 export async function transliterateCategory(categoryName: string, langCode: string = 'hi'): Promise<string> {
-  if (!categoryName || typeof categoryName !== 'string') {
-    throw new Error(`Invalid category name: "${categoryName}"`);
-  }
-
-  const items = [{ text: categoryName, type: 'category' as const, language: langCode }];
-  const results = await batchTransliterateTexts(items);
-
-  const result = results.get(categoryName);
-  if (!result) {
-    throw new Error(`Category transliteration failed for: "${categoryName}"`);
-  }
-
-  return result;
+  return transliterate(categoryName, { lang: langCode, type: 'category' });
 }
 
-/**
- * NEW: Sub-category transliteration
- */
 export async function transliterateSubCategory(subCategoryName: string, langCode: string = 'hi'): Promise<string> {
-  if (!subCategoryName || typeof subCategoryName !== 'string') {
-    throw new Error(`Invalid sub-category name: "${subCategoryName}"`);
-  }
-
-  const items = [{ text: subCategoryName, type: 'subcategory' as const, language: langCode }];
-  const results = await batchTransliterateTexts(items);
-
-  const result = results.get(subCategoryName);
-  if (!result) {
-    throw new Error(`Sub-category transliteration failed for: "${subCategoryName}"`);
-  }
-
-  return result;
+  return transliterate(subCategoryName, { lang: langCode, type: 'subcategory' });
 }
 
-/**
- * NEW: Tag transliteration
- */
 export async function transliterateTag(tagName: string, langCode: string = 'hi'): Promise<string> {
-  if (!tagName || typeof tagName !== 'string') {
-    throw new Error(`Invalid tag name: "${tagName}"`);
-  }
-
-  const items = [{ text: tagName, type: 'tag' as const, language: langCode }];
-  const results = await batchTransliterateTexts(items);
-
-  const result = results.get(tagName);
-  if (!result) {
-    throw new Error(`Tag transliteration failed for: "${tagName}"`);
-  }
-
-  return result;
+  return transliterate(tagName, { lang: langCode, type: 'tag' });
 }
 
 /**
@@ -224,16 +259,16 @@ export async function generateSlug(title: string, author: string, language: stri
 
   // Create URL-friendly slug
   const titleSlug = titleResult
-    .replace(/\s+/g, '-')           // Spaces to hyphens
-    .replace(/[^a-z0-9\-]/g, '')    // Keep only alphanumeric and hyphens
-    .replace(/-+/g, '-')            // Multiple hyphens to single
-    .replace(/^-|-$/g, '');         // Remove leading/trailing hyphens
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 
   const authorSlug = authorResult
-    .replace(/\s+/g, '-')           // Spaces to hyphens
-    .replace(/[^a-z0-9\-]/g, '')    // Keep only alphanumeric and hyphens
-    .replace(/-+/g, '-')            // Multiple hyphens to single
-    .replace(/^-|-$/g, '');         // Remove leading/trailing hyphens
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 
   if (!titleSlug || !authorSlug) {
     throw new Error('Slug generation failed - empty results after cleaning');
@@ -256,6 +291,42 @@ export function getLanguageName(langCode: string): string {
   return LANGUAGE_NAMES[langCode.toLowerCase()] || langCode.toUpperCase();
 }
 
-export function getAuthorMappings(langCode: string = 'hi'): Record<string, string> {
-  return { ...loadAuthorMappings(langCode) };
+/**
+ * Get all mappings for debugging/admin purposes
+ */
+export function getAllMappings(langCode: string = 'hi') {
+  return {
+    authors: { ...loadAuthorMappings(langCode) },
+    categories: { ...loadCategoryMappings(langCode) },
+    subcategories: { ...loadSubcategoryMappings(langCode) },
+    tags: { ...loadTagMappings(langCode) }
+  };
+}
+
+/**
+ * Cache management
+ */
+export function clearMappingCache(type?: 'author' | 'category' | 'subcategory' | 'tag') {
+  if (type) {
+    mappingCaches[type].clear();
+    console.log(`[INFO] Cleared ${type} mapping cache`);
+  } else {
+    Object.values(mappingCaches).forEach(cache => cache.clear());
+    console.log(`[INFO] Cleared all mapping caches`);
+  }
+}
+
+/**
+ * Add new mapping programmatically
+ */
+export function addMapping(
+  type: 'author' | 'category' | 'subcategory' | 'tag',
+  langCode: string,
+  original: string,
+  transliterated: string
+) {
+  const mappings = loadMappings(type, langCode);
+  mappings[original] = transliterated;
+  mappingCaches[type].set(langCode, mappings);
+  console.log(`[INFO] Added ${type} mapping: ${original} -> ${transliterated}`);
 }

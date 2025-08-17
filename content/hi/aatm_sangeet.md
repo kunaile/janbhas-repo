@@ -6,7 +6,7 @@ category: लघु-कथा
 date: 2025-08-17
 thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1ff8acf42b092d88a8a5a135a9
 audio: https://open.spotify.com/embed/episode/7K0F4DD6xgOFpBR9Sc6SzK
-words: 1,168
+words: 1168
 duration: 09:43
 published: true
 featured: true

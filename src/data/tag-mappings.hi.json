@@ -1,0 +1,29 @@
+{
+  "tag_mappings": {
+    "प्रेम": "love",
+    "दोस्ती": "friendship", 
+    "परिवार": "family",
+    "बचपन": "childhood",
+    "प्रकृति": "nature",
+    "पशु-पक्षी": "animals",
+    "त्योहार": "festival",
+    "नैतिकता": "morality",
+    "ईमानदारी": "honesty",
+    "धैर्य": "patience",
+    "साहस": "courage",
+    "दया": "kindness",
+    "क्षमा": "forgiveness",
+    "गुरु": "teacher",
+    "विद्यालय": "school",
+    "पढ़ाई": "studies",
+    "खेल": "sports",
+    "क्रिकेट": "cricket",
+    "फुटबॉल": "football",
+    "गाँव": "village",
+    "शहर": "city",
+    "नदी": "river",
+    "पहाड़": "mountain",
+    "जंगल": "forest",
+    "समुद्र": "ocean"
+  }
+}

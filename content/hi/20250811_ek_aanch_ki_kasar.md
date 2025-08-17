@@ -7,7 +7,7 @@ sub-category: हास्य
 date: 2025-08-11
 thumbnail: https://image-cdn-fa.spotifycdn.com/image/ab67656300005f1fd34ae731114b03437d8261a7
 audio: https://open.spotify.com/embed/episode/4CJqXACjnxAIzpUZtBvEwV
-words: 1,644
+words: 1644
 duration: 13:00
 published: true
 featured: true

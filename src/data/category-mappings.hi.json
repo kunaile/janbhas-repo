@@ -1,0 +1,22 @@
+{
+  "category_mappings": {
+    "कहानी": "story",
+    "लघु-कथा": "short-story",
+    "जीवनी": "biography",
+    "आत्मकथा": "autobiography",
+    "कविता": "poetry",
+    "गीत": "song",
+    "गजल": "ghazal",
+    "दोहे": "doha", 
+    "उपन्यास": "novel",
+    "नाटक": "drama",
+    "शिक्षा": "education",
+    "दर्शन": "philosophy",
+    "इतिहास": "history",
+    "राजनीति": "politics",
+    "अर्थशास्त्र": "economics",
+    "विज्ञान": "science",
+    "गणित": "mathematics",
+    "भूगोल": "geography"
+  }
+}

@@ -6,7 +6,7 @@ category: कहानी
 date: 2025-08-17
 thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1f3fe0a259c3135ceea90dc7f1
 audio: https://open.spotify.com/embed/episode/1W2AWcn5Yxd13Rwh93nzMs
-words: 3,288
+words: 3288
 duration: 21:58
 published: true
 featured: true

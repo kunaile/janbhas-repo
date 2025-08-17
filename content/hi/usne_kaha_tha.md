@@ -6,7 +6,7 @@ category: कहानी
 date: 7-jul-2025
 thumbnail:
 audio:
-words: 2,434
+words: 2434
 published: true
 ---
 
