@@ -2,10 +2,12 @@
 author: प्रेमचंद
 title: पूस की रात
 lang: hi
-category: short story
+category: कहानी
 date: 
 thumbnail: 
 audio:
+words: 2,064
+published: true
 ---
 
 हल्कू ने आकर स्त्री से कहा – सहना आया है। लाओ, जो रुपये रखे हैं, उसे दे दूं, किसी तरह गला तो छूटे।

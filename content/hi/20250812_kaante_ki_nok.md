@@ -2,8 +2,7 @@
 title: कांटे की नोंक
 author: गिजुभाई बधेका
 lang: hi
-category: poem
-sub-category: बाल कथाएँ
+category: कविता
 date: 2025-08-12
 thumbnail:
 audio: 

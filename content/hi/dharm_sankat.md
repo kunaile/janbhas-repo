@@ -2,10 +2,12 @@
 author: प्रेमचंद
 title: धर्मसंकट
 lang: hi
-category: short story
+category: कहानी
 date: 
 thumbnail: 
 audio:
+words: 2,491
+published: true
 ---
 
 ‘पुरुषों और स्त्रियों में बड़ा अन्तर है, तुम लोगों का हृदय शीशे की तरह कठोर होता है और हमारा हृदय नरम, वह विरह की आँच नहीं सह सकता।’

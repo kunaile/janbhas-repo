@@ -2,10 +2,12 @@
 author: प्रेमचंद
 title: बैर का अंत
 lang: hi
-category: short story
+category: कहानी
 date: 
 thumbnail: 
 audio:
+words: 2,515
+published: true
 ---
 
 रामेश्वरराय अपने बड़े भाई के शव को खाट से नीचे उतारते हुए भाई से बोले-तुम्हारे पास कुछ रुपये हों तो लाओ, दाह-क्रिया की फिक्र करें, मैं बिलकुल खाली हाथ हूँ।

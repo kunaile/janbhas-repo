@@ -2,7 +2,7 @@
 author: गिजुभाई बधेका
 title: भोला भट्ट
 lang: hi
-category: लघु कथा
+category: लघु-कथा
 sub-category: हास्य
 date: 2025-08-11
 thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1fd5398d43b0bd5e421a5f8b2c

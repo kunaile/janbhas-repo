@@ -2,10 +2,12 @@
 author: प्रेमचंद
 title: अनुभव
 lang: hi
-category: short story
+category: लघु-कथा
 date: 
 thumbnail: 
 audio:
+words: 1,506
+published: true
 ---
 
 

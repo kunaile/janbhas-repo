@@ -1,0 +1,40 @@
+{
+"kavita": "कविता",
+"kahani": "कहानी",
+"vyangya": "व्यंग्य",
+"children-story": "बाल-कथा",
+"laghu-katha": "लघु-कथा",
+"folk-tale": "लोक-कथा",
+
+"kalpanik": "काल्पनिक",
+"akalpanik": "अकाल्पनिक",
+"rajneeti": "राजनीति",
+"artha-shastra": "अर्थ-शास्त्र",
+"vigyan": "विज्ञान",
+"lekhak": "लेखक",
+
+"romance": "रोमांस",
+"drama": "ड्रामा",
+"tradgey": "ट्रेजेडी",
+"originals": "ऑरिजिनल्स",
+"likes": "लाइक्स",
+"views": "व्यूज़",
+
+"khojein": "खोजें",
+"judein": "जुड़ें",
+"padhein": "पढ़ें",
+
+"poem": "kavita",
+"short-story": "laghu-katha",
+"story": "kahani",
+"staire": "vyangya",
+"fiction": "kalpanik",
+"non-fiction": "gair-kalpanik",
+"politics": "rajneeti",
+"ecnomics": "arthashastra",
+"science": "vigyan",
+"author": "lekhak",
+"search": "khoj",
+"join": "shamil",
+"reads": "padhai"
+}

@@ -2,11 +2,12 @@
 author: गिजुभाई बधेका
 title: पिताजी! कौआ
 lang: hi
-category: लघु कथा
+category: लघु-कथा
+sub-category: बाल-कथा
 date: 2025-08-17
 thumbnail: https://image-cdn-fa.spotifycdn.com/image/ab67656300005f1f0402a88aa3d16e1ee36f1fd7
 audio: https://open.spotify.com/embed/episode/2d71d9UEZBuDWUUpo80sJy
-words: "1009"
+words: 1,009
 duration: 07:52
 published: true
 featured: true
