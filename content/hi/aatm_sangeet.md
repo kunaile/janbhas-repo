@@ -3,7 +3,7 @@ author: प्रेमचंद
 title: आत्म-संगीत
 lang: hi
 category: लघु-कथा
-date: 2025-08-17
+date: 2025-08-26
 thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1ff8acf42b092d88a8a5a135a9
 audio: https://open.spotify.com/embed/episode/7K0F4DD6xgOFpBR9Sc6SzK
 words: 1168

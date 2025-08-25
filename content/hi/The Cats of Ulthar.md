@@ -6,7 +6,7 @@ category: लघु-कथा
 sub-category:
 thumbnail:
 audio:
-words: 1,579
+words: 1579
 duration:
 published: true
 featured: true
