@@ -2,14 +2,12 @@
 author:
 title:
 lang: hi
-category: short story
+category: लघु-कथा
 sub-category:
-date:
-thumbnail: null
-audio: null
-words: 0
-duration: 0:00
-published: false
-featured: false
+thumbnail:
+audio:
+words:
+published:
+featured:
 ---
 
