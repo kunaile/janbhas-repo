@@ -40,10 +40,8 @@ export const authors = pgTable(
     imageUrl: text('image_url'),
   },
   (t) => ({
-    searchIdx: index('authors_search_idx').using(
-      'gin',
-      sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
-    ),
+    nameIdx: index('authors_name_idx').on(t.name),
+    localNameIdx: index('authors_local_name_idx').on(t.localName),
   })
 );
 
@@ -66,7 +64,6 @@ export const editors = pgTable(
   },
   (t) => ({
     emailIdx: index('editors_email_idx').on(t.email),
-    githubIdx: index('editors_github_idx').on(t.githubUserName),
   })
 );
 
@@ -104,10 +101,6 @@ export const categories = pgTable(
     localName: varchar('local_name', { length: 255 }),
   },
   (t) => ({
-    searchIdx: index('categories_search_idx').using(
-      'gin',
-      sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
-    ),
     nameIdx: index('categories_name_idx').on(t.name),
     localNameIdx: index('categories_local_name_idx').on(t.localName),
   })
@@ -133,13 +126,8 @@ export const subCategories = pgTable(
       .references(() => categories.id, { onDelete: 'cascade' }),
   },
   (t) => ({
-    searchIdx: index('sub_categories_search_idx').using(
-      'gin',
-      sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
-    ),
-    uniqueSubCategoryIdx: index('sub_categories_unique_idx').on(t.name, t.categoryId),
     categoryIdx: index('sub_categories_category_idx').on(t.categoryId),
-    localNameIdx: index('sub_categories_local_name_idx').on(t.localName),
+    nameIdx: index('sub_categories_name_idx').on(t.name),
   })
 );
 
@@ -164,13 +152,7 @@ export const tags = pgTable(
     slug: varchar('slug', { length: 100 }).notNull().unique(),
   },
   (t) => ({
-    searchIdx: index('tags_search_idx').using(
-      'gin',
-      sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.localName}, ''))`
-    ),
-    nameIdx: index('tags_name_idx').on(t.name),
     slugIdx: index('tags_slug_idx').on(t.slug),
-    localNameIdx: index('tags_local_name_idx').on(t.localName),
   })
 );
 
@@ -194,7 +176,6 @@ export const articleTags = pgTable(
       .references(() => tags.id, { onDelete: 'cascade' }),
   },
   (t) => ({
-    uniqueArticleTagIdx: index('article_tags_unique_idx').on(t.articleId, t.tagId),
     articleIdx: index('article_tags_article_idx').on(t.articleId),
     tagIdx: index('article_tags_tag_idx').on(t.tagId),
   })
@@ -240,26 +221,13 @@ export const articles = pgTable(
     editorId: uuid('editor_id').references(() => editors.id, { onDelete: 'set null' }),
   },
   (t) => ({
-    searchIdx: index('articles_search_idx').using(
-      'gin',
-      sql`to_tsvector('simple',
-        coalesce(${t.title}, '') || ' ' ||
-        coalesce(${t.localTitle}, '') || ' ' ||
-        coalesce(${t.shortDescription}, '') || ' ' ||
-        coalesce(${t.markdownContent}, '')
-      )`
-    ),
     slugIdx: index('articles_slug_idx').on(t.slug),
     publishedIdx: index('articles_published_idx').on(t.isPublished, t.publishedDate),
     featuredIdx: index('articles_featured_idx').on(t.isFeatured),
     languageIdx: index('articles_language_idx').on(t.languageId),
-    authorIdx: index('articles_author_idx').on(t.authorId),
     categoryIdx: index('articles_category_idx').on(t.categoryId),
-    subCategoryIdx: index('articles_sub_category_idx').on(t.subCategoryId),
-    editorIdx: index('articles_editor_idx').on(t.editorId),
-    uniqueArticleIdx: index('articles_unique_content_idx')
-      .on(t.title, t.authorId, t.languageId)
-      .where(sql`deleted_at IS NULL`),
+    authorIdx: index('articles_author_idx').on(t.authorId),
+    publishedCategoryIdx: index('articles_published_category_idx').on(t.isPublished, t.categoryId, t.languageId),
   })
 );
 
@@ -343,29 +311,6 @@ export const newsletterSubscribers = pgTable(
     // === BASIC INDEXES (following your pattern) ===
     emailIdx: index('newsletter_email_idx').on(t.email),
     statusIdx: index('newsletter_status_idx').on(t.status),
-
-    // === GEOGRAPHIC INDEXES ===
-    countryIdx: index('newsletter_country_idx').on(t.countryCode),
-    regionIdx: index('newsletter_region_idx').on(t.regionCode),
-    locationIdx: index('newsletter_location_idx').on(t.latitude, t.longitude),
-    continentIdx: index('newsletter_continent_idx').on(t.continent),
-
-    // === NETWORK ANALYSIS INDEXES ===
-    ispIdx: index('newsletter_isp_idx').on(t.isp),
-    proxyIdx: index('newsletter_proxy_idx').on(t.isProxy),
-    mobileIdx: index('newsletter_mobile_idx').on(t.isMobile),
-
-    // === JSONB INDEX (following your GIN pattern) ===
-    locationDataIdx: index('newsletter_location_data_idx').using(
-      'gin',
-      sql`${t.locationData}`
-    ),
-
-    // === COMPOSITE INDEXES FOR ANALYTICS ===
-    statusCountryIdx: index('newsletter_status_country_idx').on(t.status, t.countryCode),
-    activeSubscribersIdx: index('newsletter_active_subscribers_idx')
-      .on(t.status, t.countryCode, t.regionCode)
-      .where(sql`status = 'active'`),
   })
 );
 
