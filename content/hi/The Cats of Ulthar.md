@@ -4,7 +4,7 @@ title: उल्थर की बिल्लियाँ
 lang: hi
 category: लघु-कथा
 sub-category:
-thumbnail:
+thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/The-Cats-of-Ulthar_jqyh5u.jpg
 audio:
 words: 1398
 duration:
