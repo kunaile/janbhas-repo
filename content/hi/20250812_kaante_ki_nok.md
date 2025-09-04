@@ -8,7 +8,7 @@ thumbnail:
 audio: 
 words: 103
 duration: 
-published: true
+published: false
 ---
 
 कांटे की एक नोक।

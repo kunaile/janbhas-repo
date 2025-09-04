@@ -7,7 +7,7 @@ date:
 thumbnail: 
 audio:
 words: 1506
-published: true
+published: false
 ---
 
 

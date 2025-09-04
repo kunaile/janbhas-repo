@@ -7,7 +7,7 @@ date:
 thumbnail: 
 audio:
 words: 2064
-published: true
+published: false
 ---
 
 हल्कू ने आकर स्त्री से कहा – सहना आया है। लाओ, जो रुपये रखे हैं, उसे दे दूं, किसी तरह गला तो छूटे।

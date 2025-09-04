@@ -9,7 +9,7 @@ audio: https://open.spotify.com/embed/episode/5XLVTLvotXoOmThaDSqVif
 words: 2762
 duration: 21:14
 published: true
-featured: true
+featured: false
 ---
 
 दुखी चमार द्वार पर झाडू लगा रहा था और उसकी पत्नी झुरिया, घर को गोबर से लीप रही थी। दोनों अपने-अपने काम से फुरसत पा चुके थे, तो चमारिन ने कहा,
