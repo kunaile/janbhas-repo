@@ -4,7 +4,7 @@ title: दिल और हथकड़ी
 lang: hi
 category: लघु-कथा
 sub-category:
-thumbnail:https://res.cloudinary.com/dnsh6d8au/image/upload/v1757780241/Hearts-And-Hands_js4oc7.jpg
+thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1757780241/Hearts-And-Hands_js4oc7.jpg
 audio:
 words: 962
 published: true
