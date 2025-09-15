@@ -7,8 +7,8 @@ sub-category:
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1757969292/An-Occurrence-at-Owl-Creek-Bridge_skdvmm.jpg
 audio:
 words: 2707
-published:
-featured:
+published: true
+featured: true
 tags:
 ---
 
