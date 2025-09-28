@@ -7,21 +7,23 @@
  */
 import { eq, isNull, and, or, desc } from 'drizzle-orm';
 import { getDb } from '../db';
-import { authors, categories, languages, articles } from '../db/schema';
-import { editors } from '../db/schema';
-import { subCategories, tags, articleTags } from '../db/schema';
+import {
+  authors, authorTranslations, categories, categoryTranslations,
+  languages, articles, series, editors, subCategories, subCategoryTranslations,
+  tags, tagTranslations, articleTags, publicationEvents
+} from '../db/schema';
 
 // Using types instead of interfaces
 export type AuthorData = {
-    name: string;        // English/transliterated name
-    localName?: string | null;  // Original language name
-    bio?: string | null;
-    imageUrl?: string | null;
+  name: string;        // English/transliterated name
+  localName?: string | null;  // Original language name
+  bio?: string | null;
+  imageUrl?: string | null;
 };
 
 export type LanguageData = {
-    name: string;        // English name
-    code: string;        // Language code (normalized)
+  name: string;        // English name
+  code: string;        // Language code (normalized)
 };
 
 export type EditorData = {
@@ -33,18 +35,18 @@ export type EditorData = {
 
 export type CategoryData = {
   name: string; // Transliterated
-  localName?: string | null; // ✅ Add original vernacular
+  localName?: string | null; // Original vernacular
 };
 
 export type SubCategoryData = {
   name: string; // Transliterated
-  localName?: string | null; // ✅ Add original vernacular
+  localName?: string | null; // Original vernacular
   categoryId: string;
 };
 
 export type TagData = {
   name: string; // Transliterated
-  localName?: string | null; // ✅ Add original vernacular
+  localName?: string | null; // Original vernacular
   slug: string;
 };
 
@@ -54,20 +56,59 @@ export type ArticleData = {
   localTitle?: string | null;
   shortDescription?: string | null;
   markdownContent: string;
-  publishedDate?: string | null;
   thumbnailUrl?: string | null;
   audioUrl?: string | null;
   wordCount?: number | null;
-  duration?: number | null;
   isPublished: boolean;
   isFeatured?: boolean;
   languageId: string;
   categoryId?: string | null;
-  subCategoryId?: string | null; // Added
+  subCategoryId?: string | null;
   authorId?: string | null;
   editorId: string;
-  tags?: string[]; // Array of tag names
+  tags?: string[];
+  seriesId?: string | null;
+  episodeNumber?: number | null;
+  articleType?: 'standard' | 'original' | 'original_pro';
 };
+
+// Series data type
+export type SeriesData = {
+  slug: string;
+  title: string;
+  localTitle?: string | null;
+  shortDescription?: string | null;
+  markdownContent: string;
+  thumbnailUrl?: string | null;
+  isComplete?: boolean;
+  isPublished: boolean;
+  isFeatured?: boolean;
+  languageId: string;
+  categoryId?: string | null;
+  subCategoryId?: string | null;
+  authorId?: string | null;
+  editorId: string;
+  authorName: string;
+  authorLocalName?: string | null;
+  categoryName: string;
+  categoryLocalName?: string | null;
+  subCategoryName?: string | null;
+  subCategoryLocalName?: string | null;
+};
+
+// Current editor context for audit fields
+let currentEditorId: string | null = null;
+
+export function setCurrentEditorId(editorId: string): void {
+  currentEditorId = editorId;
+}
+
+function getCurrentEditorId(): string {
+  if (!currentEditorId) {
+    throw new Error('No editor context set. Call setCurrentEditorId() before database operations.');
+  }
+  return currentEditorId;
+}
 
 /**
  * Finds or creates an editor record by GitHub username or name
@@ -119,7 +160,7 @@ export async function findOrCreateEditor(editorData: EditorData): Promise<string
     return existingByName[0].id;
   }
 
-  // Create new editor
+  // Create new editor (editors table doesn't use baseTable, so no audit fields needed)
   const [newEditor] = await db.insert(editors).values({
     name: editorData.name,
     email: editorData.email ?? null,
@@ -130,7 +171,6 @@ export async function findOrCreateEditor(editorData: EditorData): Promise<string
   console.log(`🆕 Created new editor: ${editorData.name}${editorData.githubUserName ? ` (${editorData.githubUserName})` : ''}${editorData.email ? ` <${editorData.email}>` : ''}`);
   return newEditor.id;
 }
-
 
 /**
  * Create slug from text
@@ -145,12 +185,14 @@ function createSlug(text: string): string {
 }
 
 /**
- * Process article tags
+ * Process article tags (with proper audit fields and translation support)
  */
 export async function processArticleTags(articleId: string, tagNames: string[]): Promise<void> {
   const db = getDb();
 
   if (!tagNames || tagNames.length === 0) return;
+
+  const editorId = getCurrentEditorId();
 
   // First, remove existing tags for this article
   await db.delete(articleTags)
@@ -165,103 +207,108 @@ export async function processArticleTags(articleId: string, tagNames: string[]):
 
     const tagId = await findOrCreateTag(tagData);
 
+    // Include required audit fields
     await db.insert(articleTags).values({
       articleId,
       tagId,
+      createdBy: editorId,
+      updatedBy: editorId,
     });
   }
 }
-
 
 /**
  * Find editor by GitHub username
  */
 export async function findEditorByGithubUsername(githubUsername: string): Promise<string | null> {
-    const db = getDb();
+  const db = getDb();
 
-    const existingEditor = await db.select()
-        .from(editors)
-        .where(and(
-            eq(editors.githubUserName, githubUsername),
-            isNull(editors.deletedAt)
-        ))
-        .limit(1);
+  const existingEditor = await db.select()
+    .from(editors)
+    .where(and(
+      eq(editors.githubUserName, githubUsername),
+      isNull(editors.deletedAt)
+    ))
+    .limit(1);
 
-    return existingEditor.length > 0 ? existingEditor[0].id : null;
+  return existingEditor.length > 0 ? existingEditor[0].id : null;
 }
 
 /**
  * Get all editors with article counts
  */
 export async function getEditorsWithCounts(): Promise<Array<{
-    editor: typeof editors.$inferSelect;
-    articleCount: number;
+  editor: typeof editors.$inferSelect;
+  articleCount: number;
 }>> {
-    const db = getDb();
+  const db = getDb();
 
-    const editors_list = await db.select()
-        .from(editors)
-        .where(isNull(editors.deletedAt));
+  const editors_list = await db.select()
+    .from(editors)
+    .where(isNull(editors.deletedAt));
 
-    const results = [];
+  const results = [];
 
-    for (const editor of editors_list) {
-        const count = await db.select()
-            .from(articles)
-            .where(and(
-                eq(articles.editorId, editor.id),
-                isNull(articles.deletedAt),
-                eq(articles.isPublished, true)
-            ));
+  for (const editor of editors_list) {
+    const count = await db.select()
+      .from(articles)
+      .where(and(
+        eq(articles.editorId, editor.id),
+        isNull(articles.deletedAt),
+        eq(articles.isPublished, true)
+      ));
 
-        results.push({
-            editor,
-            articleCount: count.length
-        });
-    }
+    results.push({
+      editor,
+      articleCount: count.length
+    });
+  }
 
-    return results;
+  return results;
 }
 
 /**
- * Finds or creates an author record
+ * Finds or creates an author record (Translation table support)
  * Returns the author's UUID for foreign key reference
  */
 export async function findOrCreateAuthor(authorData: AuthorData): Promise<string> {
-    const db = getDb();
+  const db = getDb();
+  const editorId = getCurrentEditorId();
 
-    // Check if author exists (by English name)
-    const existingAuthor = await db.select()
-        .from(authors)
-        .where(and(
-            eq(authors.name, authorData.name),
-            isNull(authors.deletedAt)
-        ))
-        .limit(1);
+  // Check if author exists (by English name)
+  const existingAuthor = await db.select()
+    .from(authors)
+    .where(and(
+      eq(authors.name, authorData.name),
+      isNull(authors.deletedAt)
+    ))
+    .limit(1);
 
-    if (existingAuthor.length > 0) {
-        // Found existing - no creation needed
-        return existingAuthor[0].id;
-    }
+  if (existingAuthor.length > 0) {
+    // Found existing - no creation needed
+    return existingAuthor[0].id;
+  }
 
-    // Create new author
-    const [newAuthor] = await db.insert(authors).values({
-        name: authorData.name,
-        localName: authorData.localName ?? null,
-        bio: authorData.bio ?? null,
-        imageUrl: authorData.imageUrl ?? null,
-    }).returning({ id: authors.id });
+  // Create new author with required audit fields
+  const [newAuthor] = await db.insert(authors).values({
+    name: authorData.name,
+    bio: authorData.bio ?? null,
+    imageUrl: authorData.imageUrl ?? null,
+    createdBy: editorId,
+    updatedBy: editorId,
+  }).returning({ id: authors.id });
 
-    console.log(`   🆕 Created new author: ${authorData.name}`);
-    return newAuthor.id;
+  console.log(`   🆕 Created new author: ${authorData.name}`);
+  return newAuthor.id;
 }
 
 /**
- * Finds or creates a category record
+ * Finds or creates a category record (Using translation tables)
  * Categories are stored in lowercase for consistency
  */
 export async function findOrCreateCategory(categoryData: CategoryData): Promise<string> {
   const db = getDb();
+  const editorId = getCurrentEditorId();
 
   // Try to find by transliterated name first
   const existingByName = await db.select()
@@ -276,37 +323,23 @@ export async function findOrCreateCategory(categoryData: CategoryData): Promise<
     return existingByName[0].id;
   }
 
-  // Try to find by local name if provided
-  if (categoryData.localName) {
-    const existingByLocalName = await db.select()
-      .from(categories)
-      .where(and(
-        eq(categories.localName, categoryData.localName),
-        isNull(categories.deletedAt)
-      ))
-      .limit(1);
-
-    if (existingByLocalName.length > 0) {
-      return existingByLocalName[0].id;
-    }
-  }
-
-  // Create new category
+  // Create new category with required audit fields
   const [newCategory] = await db.insert(categories).values({
     name: categoryData.name,
-    localName: categoryData.localName ?? null,
+    createdBy: editorId,
+    updatedBy: editorId,
   }).returning({ id: categories.id });
 
   return newCategory.id;
 }
 
 /**
- * Finds or creates a sub-category record
+ * Finds or creates a sub-category record (Using translation tables)
  * Sub-categories are linked to categories
  */
-
 export async function findOrCreateSubCategory(subCategoryData: SubCategoryData): Promise<string> {
   const db = getDb();
+  const editorId = getCurrentEditorId();
 
   // Check by transliterated name and category
   const existingByName = await db.select()
@@ -322,39 +355,24 @@ export async function findOrCreateSubCategory(subCategoryData: SubCategoryData):
     return existingByName[0].id;
   }
 
-  // Check by local name if provided
-  if (subCategoryData.localName) {
-    const existingByLocalName = await db.select()
-      .from(subCategories)
-      .where(and(
-        eq(subCategories.localName, subCategoryData.localName),
-        eq(subCategories.categoryId, subCategoryData.categoryId),
-        isNull(subCategories.deletedAt)
-      ))
-      .limit(1);
-
-    if (existingByLocalName.length > 0) {
-      return existingByLocalName[0].id;
-    }
-  }
-
-  // Create new sub-category
+  // Create new sub-category with required audit fields
   const [newSubCategory] = await db.insert(subCategories).values({
     name: subCategoryData.name,
-    localName: subCategoryData.localName ?? null,
     categoryId: subCategoryData.categoryId,
+    createdBy: editorId,
+    updatedBy: editorId,
   }).returning({ id: subCategories.id });
 
   return newSubCategory.id;
 }
 
 /**
- * Finds or creates a tag record
+ * Finds or creates a tag record (using translation tables)
  * Tags are stored in lowercase for consistency
  */
-
 export async function findOrCreateTag(tagData: TagData): Promise<string> {
   const db = getDb();
+  const editorId = getCurrentEditorId();
 
   // Check by transliterated name
   const existingByName = await db.select()
@@ -369,65 +387,155 @@ export async function findOrCreateTag(tagData: TagData): Promise<string> {
     return existingByName[0].id;
   }
 
-  // Check by local name if provided
-  if (tagData.localName) {
-    const existingByLocalName = await db.select()
-      .from(tags)
-      .where(and(
-        eq(tags.localName, tagData.localName),
-        isNull(tags.deletedAt)
-      ))
-      .limit(1);
-
-    if (existingByLocalName.length > 0) {
-      return existingByLocalName[0].id;
-    }
-  }
-
-  // Create new tag
+  // Create new tag with required audit fields
   const [newTag] = await db.insert(tags).values({
     name: tagData.name,
-    localName: tagData.localName ?? null,
     slug: tagData.slug,
+    createdBy: editorId,
+    updatedBy: editorId,
   }).returning({ id: tags.id });
 
   return newTag.id;
 }
 
 /**
- * Finds or creates a language record
+ * Finds or creates a language record (with audit fields)
  * Language codes are normalized to lowercase
  */
 export async function findOrCreateLanguage(languageData: LanguageData): Promise<string> {
-    const db = getDb();
+  const db = getDb();
+  const editorId = getCurrentEditorId();
 
-    const existingLanguage = await db.select()
-        .from(languages)
-        .where(and(
-            eq(languages.code, languageData.code),
-            isNull(languages.deletedAt)
-        ))
-        .limit(1);
+  const existingLanguage = await db.select()
+    .from(languages)
+    .where(and(
+      eq(languages.code, languageData.code),
+      isNull(languages.deletedAt)
+    ))
+    .limit(1);
 
-    if (existingLanguage.length > 0) {
-        // Found existing - no creation needed
-        return existingLanguage[0].id;
-    }
+  if (existingLanguage.length > 0) {
+    // Found existing - no creation needed
+    return existingLanguage[0].id;
+  }
 
-    const [newLanguage] = await db.insert(languages).values({
-        name: languageData.name,
-        code: languageData.code,
-    }).returning({ id: languages.id });
+  // Create new language with required audit fields
+  const [newLanguage] = await db.insert(languages).values({
+    name: languageData.name,
+    code: languageData.code,
+    createdBy: editorId,
+    updatedBy: editorId,
+  }).returning({ id: languages.id });
 
-    console.log(`   🆕 Created new language: ${languageData.name} (${languageData.code})`);
-    return newLanguage.id;
+  console.log(`   🆕 Created new language: ${languageData.name} (${languageData.code})`);
+  return newLanguage.id;
+}
+
+// Series functions
+
+/**
+ * Find series by slug for episode linking
+ */
+export async function findSeriesBySlug(slug: string): Promise<{ id: string; title: string; totalEpisodes: number } | null> {
+  const db = getDb();
+
+  const result = await db.select({
+    id: series.id,
+    title: series.title,
+    totalEpisodes: series.totalEpisodes
+  })
+    .from(series)
+    .where(and(
+      eq(series.slug, slug),
+      isNull(series.deletedAt)
+    ))
+    .limit(1);
+
+  return result[0] || null;
 }
 
 /**
- * Updated upsert article with sub-category and tags support
+ * Get next episode number for a series
+ */
+export async function getNextEpisodeNumber(seriesId: string): Promise<number> {
+  const db = getDb();
+
+  const result = await db.select({
+    maxEpisode: articles.episodeNumber
+  })
+    .from(articles)
+    .where(and(
+      eq(articles.seriesId, seriesId),
+      isNull(articles.deletedAt)
+    ))
+    .orderBy(desc(articles.episodeNumber))
+    .limit(1);
+
+  return (result[0]?.maxEpisode || 0) + 1;
+}
+
+/**
+ * Upsert series
+ */
+export async function upsertSeries(seriesData: SeriesData): Promise<string> {
+  const db = getDb();
+  const editorId = getCurrentEditorId();
+
+  // Check if series exists
+  const existing = await db.select()
+    .from(series)
+    .where(and(
+      eq(series.slug, seriesData.slug),
+      isNull(series.deletedAt)
+    ))
+    .limit(1);
+
+  const seriesValues = {
+    slug: seriesData.slug,
+    title: seriesData.title,
+    localTitle: seriesData.localTitle,
+    shortDescription: seriesData.shortDescription,
+    markdownContent: seriesData.markdownContent,
+    thumbnailUrl: seriesData.thumbnailUrl,
+    isComplete: seriesData.isComplete || false,
+    isPublished: seriesData.isPublished,
+    isFeatured: seriesData.isFeatured || false,
+    languageId: seriesData.languageId,
+    categoryId: seriesData.categoryId,
+    subCategoryId: seriesData.subCategoryId,
+    authorId: seriesData.authorId,
+    editorId: seriesData.editorId,
+    authorName: seriesData.authorName,
+    authorLocalName: seriesData.authorLocalName,
+    categoryName: seriesData.categoryName,
+    categoryLocalName: seriesData.categoryLocalName,
+    subCategoryName: seriesData.subCategoryName,
+    subCategoryLocalName: seriesData.subCategoryLocalName,
+    createdBy: editorId,
+    updatedBy: editorId,
+  };
+
+  if (existing.length > 0) {
+    // Update existing series
+    await db.update(series)
+      .set({ ...seriesValues, updatedAt: new Date() })
+      .where(eq(series.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    // Insert new series
+    const [newSeries] = await db.insert(series)
+      .values(seriesValues)
+      .returning({ id: series.id });
+    return newSeries.id;
+  }
+}
+
+/**
+ * Updated upsert article - CLEANED (removed publishedDate and duration)
  */
 export async function upsertArticle(articleData: ArticleData): Promise<void> {
   const db = getDb();
+  const editorId = getCurrentEditorId();
 
   // Check if article exists
   const existing = await db.select()
@@ -444,18 +552,23 @@ export async function upsertArticle(articleData: ArticleData): Promise<void> {
     localTitle: articleData.localTitle,
     shortDescription: articleData.shortDescription,
     markdownContent: articleData.markdownContent,
-    publishedDate: articleData.publishedDate,
     thumbnailUrl: articleData.thumbnailUrl,
     audioUrl: articleData.audioUrl,
     wordCount: articleData.wordCount,
-    duration: articleData.duration,
     isPublished: articleData.isPublished,
     isFeatured: articleData.isFeatured || false,
     languageId: articleData.languageId,
     categoryId: articleData.categoryId,
-    subCategoryId: articleData.subCategoryId, // Added
+    subCategoryId: articleData.subCategoryId,
     authorId: articleData.authorId,
     editorId: articleData.editorId,
+    seriesId: articleData.seriesId,
+    episodeNumber: articleData.episodeNumber,
+    articleType: articleData.articleType || 'standard',
+    authorName: 'Unknown', // Will be updated by triggers
+    categoryName: 'Uncategorized', // Will be updated by triggers
+    createdBy: editorId,
+    updatedBy: editorId,
   };
 
   let articleId: string;
@@ -481,314 +594,353 @@ export async function upsertArticle(articleData: ArticleData): Promise<void> {
 }
 
 /**
+ * Create publication event
+ */
+export async function createPublicationEvent(eventData: {
+  articleId?: string;
+  seriesId?: string;
+  eventType: 'published' | 'unpublished' | 'featured' | 'unfeatured';
+  performedBy: string;
+  reason?: string;
+  metadata?: any;
+}): Promise<void> {
+  const db = getDb();
+
+  await db.insert(publicationEvents).values({
+    articleId: eventData.articleId || null,
+    seriesId: eventData.seriesId || null,
+    eventType: eventData.eventType,
+    performedBy: eventData.performedBy,
+    reason: eventData.reason || null,
+    metadata: eventData.metadata || null,
+  });
+}
+
+/**
  * Soft deletes an article by slug
- * Records who deleted it and when
  */
 export async function softDeleteArticle(slug: string, deletedByUsername: string): Promise<void> {
-    const db = getDb();
+  const db = getDb();
 
-    await db.update(articles)
-        .set({
-            deletedAt: new Date(),
-            deletedBy: deletedByUsername, // This should ideally be an editor UUID
-        })
-        .where(and(
-            eq(articles.slug, slug),
-            isNull(articles.deletedAt)
-        ));
+  await db.update(articles)
+    .set({
+      deletedAt: new Date(),
+      deletedBy: deletedByUsername,
+    })
+    .where(and(
+      eq(articles.slug, slug),
+      isNull(articles.deletedAt)
+    ));
 
-    console.log(`🗑️ Soft deleted article with slug: ${slug} by ${deletedByUsername}`);
+  console.log(`🗑️ Soft deleted article with slug: ${slug} by ${deletedByUsername}`);
 }
 
 /**
  * Gets all active articles (not soft-deleted)
- * Used for determining which articles no longer exist in repo
  */
 export async function getAllActiveArticles(): Promise<Array<{ slug: string; title: string }>> {
-    const db = getDb();
+  const db = getDb();
 
-    const activeArticles = await db.select({
-        slug: articles.slug,
-        title: articles.title,
-    })
-        .from(articles)
-        .where(isNull(articles.deletedAt));
+  const activeArticles = await db.select({
+    slug: articles.slug,
+    title: articles.title,
+  })
+    .from(articles)
+    .where(isNull(articles.deletedAt));
 
-    return activeArticles;
+  return activeArticles;
 }
 
 /**
  * Gets an article by slug with all related data
- * Used for displaying complete article information
  */
 export async function getArticleBySlug(slug: string): Promise<any> {
-    const db = getDb();
+  const db = getDb();
 
-    const article = await db.select({
-        article: articles,
-        author: authors,
-        category: categories,
-        language: languages,
-    })
-        .from(articles)
-        .leftJoin(authors, eq(articles.authorId, authors.id))
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(languages, eq(articles.languageId, languages.id))
-        .where(and(
-            eq(articles.slug, slug),
-            isNull(articles.deletedAt),
-            eq(articles.isPublished, true)
-        ))
-        .limit(1);
+  const article = await db.select({
+    article: articles,
+    author: authors,
+    category: categories,
+    language: languages,
+  })
+    .from(articles)
+    .leftJoin(authors, eq(articles.authorId, authors.id))
+    .leftJoin(categories, eq(articles.categoryId, categories.id))
+    .leftJoin(languages, eq(articles.languageId, languages.id))
+    .where(and(
+      eq(articles.slug, slug),
+      isNull(articles.deletedAt),
+      eq(articles.isPublished, true)
+    ))
+    .limit(1);
 
-    return article[0] || null;
+  return article[0] || null;
 }
 
 /**
  * Gets articles with filtering and pagination
- * ALTERNATIVE: Build complete query without conditional chaining
  */
 export async function getArticles(options: {
-    languageCode?: string;
-    categoryName?: string;
-    authorName?: string;
-    isPublished?: boolean;
-    limit?: number;
-    offset?: number;
+  languageCode?: string;
+  categoryName?: string;
+  authorName?: string;
+  isPublished?: boolean;
+  limit?: number;
+  offset?: number;
 }): Promise<Array<any>> {
-    const db = getDb();
+  const db = getDb();
 
-    // Build conditions array
-    const conditions = [isNull(articles.deletedAt)];
+  // Build conditions array
+  const conditions = [isNull(articles.deletedAt)];
 
-    if (options.languageCode) {
-        conditions.push(eq(languages.code, options.languageCode));
-    }
+  if (options.languageCode) {
+    conditions.push(eq(languages.code, options.languageCode));
+  }
 
-    if (options.categoryName) {
-        conditions.push(eq(categories.name, options.categoryName));
-    }
+  if (options.categoryName) {
+    conditions.push(eq(categories.name, options.categoryName));
+  }
 
-    if (options.authorName) {
-        conditions.push(eq(authors.name, options.authorName));
-    }
+  if (options.authorName) {
+    conditions.push(eq(authors.name, options.authorName));
+  }
 
-    if (options.isPublished !== undefined) {
-        conditions.push(eq(articles.isPublished, options.isPublished));
-    }
+  if (options.isPublished !== undefined) {
+    conditions.push(eq(articles.isPublished, options.isPublished));
+  }
 
-    // Build complete query with default values
-    const limit = options.limit || 50; // Default limit
-    const offset = options.offset || 0; // Default offset
+  // Build complete query with default values
+  const limit = options.limit || 50;
+  const offset = options.offset || 0;
 
-    const query = await db.select({
-        article: articles,
-        author: authors,
-        category: categories,
-        language: languages,
-    })
-        .from(articles)
-        .leftJoin(authors, eq(articles.authorId, authors.id))
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(languages, eq(articles.languageId, languages.id))
-        .where(and(...conditions))
-        .orderBy(desc(articles.createdAt))
-        .limit(limit)
-        .offset(offset);
+  const query = await db.select({
+    article: articles,
+    author: authors,
+    category: categories,
+    language: languages,
+  })
+    .from(articles)
+    .leftJoin(authors, eq(articles.authorId, authors.id))
+    .leftJoin(categories, eq(articles.categoryId, categories.id))
+    .leftJoin(languages, eq(articles.languageId, languages.id))
+    .where(and(...conditions))
+    .orderBy(desc(articles.createdAt))
+    .limit(limit)
+    .offset(offset);
 
-    return query;
+  return query;
 }
-
 
 /**
  * Searches articles by text query
- * FIXED: Simplified search without complex query chaining
  */
 export async function searchArticles(searchQuery: string, options?: {
-    languageCode?: string;
-    limit?: number;
-    offset?: number;
+  languageCode?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<Array<any>> {
-    const db = getDb();
+  const db = getDb();
 
-    // Build conditions array for search
-    const conditions = [
-        isNull(articles.deletedAt),
-        eq(articles.isPublished, true)
-    ];
+  // Build conditions array for search
+  const conditions = [
+    isNull(articles.deletedAt),
+    eq(articles.isPublished, true)
+  ];
 
-    if (options?.languageCode) {
-        conditions.push(eq(languages.code, options.languageCode));
-    }
+  if (options?.languageCode) {
+    conditions.push(eq(languages.code, options.languageCode));
+  }
 
-    // For now, implement basic text search - you can enhance this with full-text search later
-    // This searches in title and localTitle fields
-    const searchCondition = or(
-        // SQL ILIKE for case-insensitive search
-        // Note: You might need to use sql`` template for more complex searches
-    );
+  const query = db.select({
+    article: articles,
+    author: authors,
+    category: categories,
+    language: languages,
+  })
+    .from(articles)
+    .leftJoin(authors, eq(articles.authorId, authors.id))
+    .leftJoin(categories, eq(articles.categoryId, categories.id))
+    .leftJoin(languages, eq(articles.languageId, languages.id))
+    .where(and(...conditions))
+    .limit(options?.limit || 20)
+    .offset(options?.offset || 0);
 
-    const query = db.select({
-        article: articles,
-        author: authors,
-        category: categories,
-        language: languages,
-    })
-        .from(articles)
-        .leftJoin(authors, eq(articles.authorId, authors.id))
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(languages, eq(articles.languageId, languages.id))
-        .where(and(...conditions))
-        .limit(options?.limit || 20)
-        .offset(options?.offset || 0);
-
-    return await query;
+  return await query;
 }
 
 /**
  * Gets statistics about the content
- * FIXED: Simplified count queries
  */
 export async function getContentStats(): Promise<{
-    totalArticles: number;
-    publishedArticles: number;
-    totalAuthors: number;
-    totalCategories: number;
-    totalLanguages: number;
+  totalArticles: number;
+  publishedArticles: number;
+  totalSeries: number;
+  totalAuthors: number;
+  totalCategories: number;
+  totalLanguages: number;
 }> {
-    const db = getDb();
+  const db = getDb();
 
-    const [
-        totalArticlesResult,
-        publishedArticlesResult,
-        totalAuthorsResult,
-        totalCategoriesResult,
-        totalLanguagesResult
-    ] = await Promise.all([
-        db.select()
-            .from(articles)
-            .where(isNull(articles.deletedAt)),
-        db.select()
-            .from(articles)
-            .where(and(
-                isNull(articles.deletedAt),
-                eq(articles.isPublished, true)
-            )),
-        db.select()
-            .from(authors)
-            .where(isNull(authors.deletedAt)),
-        db.select()
-            .from(categories)
-            .where(isNull(categories.deletedAt)),
-        db.select()
-            .from(languages)
-            .where(isNull(languages.deletedAt))
-    ]);
+  const [
+    totalArticlesResult,
+    publishedArticlesResult,
+    totalSeriesResult,
+    totalAuthorsResult,
+    totalCategoriesResult,
+    totalLanguagesResult
+  ] = await Promise.all([
+    db.select().from(articles).where(isNull(articles.deletedAt)),
+    db.select().from(articles).where(and(isNull(articles.deletedAt), eq(articles.isPublished, true))),
+    db.select().from(series).where(isNull(series.deletedAt)),
+    db.select().from(authors).where(isNull(authors.deletedAt)),
+    db.select().from(categories).where(isNull(categories.deletedAt)),
+    db.select().from(languages).where(isNull(languages.deletedAt))
+  ]);
 
-    return {
-        totalArticles: totalArticlesResult.length,
-        publishedArticles: publishedArticlesResult.length,
-        totalAuthors: totalAuthorsResult.length,
-        totalCategories: totalCategoriesResult.length,
-        totalLanguages: totalLanguagesResult.length
-    };
+  return {
+    totalArticles: totalArticlesResult.length,
+    publishedArticles: publishedArticlesResult.length,
+    totalSeries: totalSeriesResult.length,
+    totalAuthors: totalAuthorsResult.length,
+    totalCategories: totalCategoriesResult.length,
+    totalLanguages: totalLanguagesResult.length
+  };
 }
 
 /**
  * Gets all languages with article counts
- * FIXED: Simplified approach without complex aggregation
  */
 export async function getLanguagesWithCounts(): Promise<Array<{
-    language: any;
-    articleCount: number;
+  language: any;
+  articleCount: number;
 }>> {
-    const db = getDb();
+  const db = getDb();
 
-    const languages_list = await db.select()
-        .from(languages)
-        .where(isNull(languages.deletedAt));
+  const languages_list = await db.select()
+    .from(languages)
+    .where(isNull(languages.deletedAt));
 
-    const results = [];
-    for (const language of languages_list) {
-        const count = await db.select()
-            .from(articles)
-            .where(and(
-                eq(articles.languageId, language.id),
-                isNull(articles.deletedAt),
-                eq(articles.isPublished, true)
-            ));
+  const results = [];
+  for (const language of languages_list) {
+    const count = await db.select()
+      .from(articles)
+      .where(and(
+        eq(articles.languageId, language.id),
+        isNull(articles.deletedAt),
+        eq(articles.isPublished, true)
+      ));
 
-        results.push({
-            language,
-            articleCount: count.length
-        });
-    }
+    results.push({
+      language,
+      articleCount: count.length
+    });
+  }
 
-    return results;
+  return results;
 }
 
 /**
  * Gets all categories with article counts
- * FIXED: Simplified approach
  */
 export async function getCategoriesWithCounts(): Promise<Array<{
-    category: any;
-    articleCount: number;
+  category: any;
+  articleCount: number;
 }>> {
-    const db = getDb();
+  const db = getDb();
 
-    const categories_list = await db.select()
-        .from(categories)
-        .where(isNull(categories.deletedAt));
+  const categories_list = await db.select()
+    .from(categories)
+    .where(isNull(categories.deletedAt));
 
-    const results = [];
-    for (const category of categories_list) {
-        const count = await db.select()
-            .from(articles)
-            .where(and(
-                eq(articles.categoryId, category.id),
-                isNull(articles.deletedAt),
-                eq(articles.isPublished, true)
-            ));
+  const results = [];
+  for (const category of categories_list) {
+    const count = await db.select()
+      .from(articles)
+      .where(and(
+        eq(articles.categoryId, category.id),
+        isNull(articles.deletedAt),
+        eq(articles.isPublished, true)
+      ));
 
-        results.push({
-            category,
-            articleCount: count.length
-        });
-    }
+    results.push({
+      category,
+      articleCount: count.length
+    });
+  }
 
-    return results;
+  return results;
 }
 
 /**
  * Gets all authors with article counts
- * FIXED: Simplified approach
  */
 export async function getAuthorsWithCounts(): Promise<Array<{
-    author: any;
-    articleCount: number;
+  author: any;
+  articleCount: number;
 }>> {
-    const db = getDb();
+  const db = getDb();
 
-    const authors_list = await db.select()
-        .from(authors)
-        .where(isNull(authors.deletedAt));
+  const authors_list = await db.select()
+    .from(authors)
+    .where(isNull(authors.deletedAt));
 
-    const results = [];
-    for (const author of authors_list) {
-        const count = await db.select()
-            .from(articles)
-            .where(and(
-                eq(articles.authorId, author.id),
-                isNull(articles.deletedAt),
-                eq(articles.isPublished, true)
-            ));
+  const results = [];
+  for (const author of authors_list) {
+    const count = await db.select()
+      .from(articles)
+      .where(and(
+        eq(articles.authorId, author.id),
+        isNull(articles.deletedAt),
+        eq(articles.isPublished, true)
+      ));
 
-        results.push({
-            author,
-            articleCount: count.length
-        });
-    }
+    results.push({
+      author,
+      articleCount: count.length
+    });
+  }
 
-    return results;
+  return results;
+}
+
+/**
+ * Get series by local title (original title) - EXISTING FUNCTION
+ */
+export async function findSeriesByLocalTitle(localTitle: string): Promise<{ id: string; slug: string } | null> {
+  const db = getDb();
+
+  const result = await db.select({
+    id: series.id,
+    slug: series.slug
+  })
+    .from(series)
+    .where(and(
+      eq(series.localTitle, localTitle),
+      isNull(series.deletedAt)
+    ))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+/**
+ * Find series by English title (for episode references)
+ * Episodes reference series by their English title via series_title field
+ */
+export async function findSeriesByTitle(title: string): Promise<{ id: string; slug: string; local_title: string | null } | null> {
+  const db = getDb();
+
+  const result = await db.select({
+    id: series.id,
+    slug: series.slug,
+    local_title: series.localTitle
+  })
+    .from(series)
+    .where(and(
+      eq(series.title, title),
+      isNull(series.deletedAt)
+    ))
+    .limit(1);
+
+  return result[0] || null;
 }

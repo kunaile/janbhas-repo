@@ -2,18 +2,31 @@
 
 import { findOrCreateEditor, type EditorData } from '../database';
 import { log } from './utils';
-import { findMarkdownFiles, parseMarkdownFiles } from './fileProcessor';
-import { batchProcessTransliterations } from './transliterationProcessor';
+import { parseMarkdownFiles } from './fileProcessor';
+import { batchProcessTransliterations, getTransliterationStats } from './transliterationProcessor';
 import { populateReferenceTablesFirst } from './referenceProcessor';
 import { processArticles } from './articleProcessor';
 
 // Re-export types and utilities for external use
 export * from './types';
-export { log, extractShortDescription, parseDuration, processTags } from './utils';
+export {
+  log,
+  extractShortDescription,
+  processTags,
+  createTagSlug,
+  validateRequiredFields,
+  cleanTextContent,
+  formatFileSize,
+  formatTime,
+  isValidSlug,
+  countWords,
+  truncateText,
+  isValidLanguageCode
+} from './utils';
 export { findMarkdownFiles, parseMarkdownFile } from './fileProcessor';
 
 /**
- * Main content sync function that orchestrates the entire process
+ * Main content sync function orchestrating the entire process
  */
 export async function syncContent(
   files: string[],
@@ -23,37 +36,56 @@ export async function syncContent(
   const { verbose = false, dryRun = false } = options;
 
   if (verbose) {
-    log.info(`Starting content sync for ${files.length} files`);
-    if (dryRun) log.info('DRY RUN MODE - No database changes will be made');
+    log.info(`🚀 Starting content sync for ${files.length} files`);
+    if (dryRun) log.info('🛠️  DRY-RUN mode — no database changes will be made');
   }
 
-  // Step 1: Parse markdown files
+  /* ────────────────────────── 1. PARSE FILES ────────────────────────── */
   const parsedFiles = parseMarkdownFiles(files);
 
   if (parsedFiles.length === 0) {
     throw new Error('No valid files to process');
   }
 
-  log.info(`Successfully parsed ${parsedFiles.length}/${files.length} files`);
+  // Quick content-type breakdown (already set by fileProcessor)
+  const seriesCount = parsedFiles.filter(f => f.contentType === 'series').length;
+  const episodeCount = parsedFiles.filter(f => f.contentType === 'episode').length;
+  const articleCount = parsedFiles.filter(f => f.contentType === 'article').length;
 
-  // Step 2: Batch process transliterations
+  log.info(
+    `✓ Parsed ${parsedFiles.length}/${files.length} files ` +
+    `(${seriesCount} series, ${episodeCount} episodes, ${articleCount} articles)`
+  );
+
+  /* ─────────────────── 2. TRANSLITERATE & GENERATE SLUGS ─────────────────── */
   const processedFiles = await batchProcessTransliterations(parsedFiles);
 
-  // Step 3: Create or find editor
+  // Collect transliteration statistics for reporting
+  const translitStats = getTransliterationStats(processedFiles);
+
+  /* ───────────────────────── 3. EDITOR HANDLING ───────────────────────── */
   const editorId = await findOrCreateEditor(editorData);
-  log.success(`Editor processed: ${editorData.name}`);
+  log.success(`👤 Editor processed: ${editorData.name}`);
 
-  // Step 4: Populate reference tables
-  const referenceMaps = await populateReferenceTablesFirst(processedFiles, editorId);
+  /* ──────────────────────── 4. REFERENCE TABLES ───────────────────────── */
+  const referenceMaps = await populateReferenceTablesFirst(
+    processedFiles,
+    editorId
+  );
 
-  // Step 5: Process articles
-  const { processed, errors, warnings } = await processArticles(
+  /* ─────────────────────────── 5. ARTICLES ─────────────────────────── */
+  const {
+    processed,
+    errors,
+    warnings
+  } = await processArticles(
     processedFiles,
     referenceMaps,
     editorId,
     { verbose, dryRun }
   );
 
+  /* ────────────────────────── 6. SYNC RESULT ────────────────────────── */
   return {
     totalFiles: files.length,
     parsedFiles: parsedFiles.length,
@@ -64,17 +96,24 @@ export async function syncContent(
     tags: referenceMaps.tagMap.size,
     articlesProcessed: processed,
     errors,
-    warnings
+    warnings,
+    seriesProcessed: seriesCount,
+    episodesProcessed: episodeCount,
+    seriesReferencesFound: referenceMaps.seriesMap.size,
+
+    // Mapping-specific metrics
+    mappingSuccesses: translitStats.totalFiles,
+    mappingFailures: 0,           // Failures already throw; keep 0 for now
+    duplicateSlugs: 0             // Duplicates are prevented during slug generation
   };
 }
 
-/**
- * Get editor information from environment variables
- */
+/* ─────────────────────── EDITOR HELPERS ─────────────────────── */
+
 export function getEditorFromEnvironment(): EditorData {
   const editorName = process.env.EDITOR_NAME;
   const editorEmail = process.env.EDITOR_EMAIL;
-  const editorGithubUsername = process.env.EDITOR_GITHUB_USERNAME;
+  const githubUser = process.env.EDITOR_GITHUB_USERNAME;
 
   if (!editorName) {
     throw new Error('EDITOR_NAME environment variable is required');
@@ -83,7 +122,7 @@ export function getEditorFromEnvironment(): EditorData {
   return {
     name: editorName,
     email: editorEmail || null,
-    githubUserName: editorGithubUsername || null
+    githubUserName: githubUser || null
   };
 }
 
