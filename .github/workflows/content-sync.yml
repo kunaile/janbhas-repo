@@ -15,15 +15,13 @@ concurrency:
 
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
-  GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
   NODE_ENV: production
 
 jobs:
   sync-changed-content:
     runs-on: ubuntu-latest
-    # FIXED: More flexible commit message matching
     if: contains(github.event.head_commit.message, 'publish')
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: 🔐 Verify authorization
@@ -31,30 +29,22 @@ jobs:
           AUTHORIZED_USERS="${{ secrets.AUTHORIZED_SYNC_USERS }}"
           CURRENT_USER="${{ github.event.head_commit.author.username }}"
           
-          if [[ -z "$AUTHORIZED_USERS" ]]; then
-            echo "❌ Authorization configuration missing"
-            exit 1
-          fi
-          
-          if [[ "$AUTHORIZED_USERS" != *"$CURRENT_USER"* ]]; then
+          if [[ -z "$AUTHORIZED_USERS" || "$AUTHORIZED_USERS" != *"$CURRENT_USER"* ]]; then
             echo "❌ Unauthorized sync attempt by: $CURRENT_USER"
-            echo "ℹ️  Authorized users: $AUTHORIZED_USERS"
             exit 1
           fi
-          
-          echo "✅ Authorization verified for: $CURRENT_USER"
 
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: 🔍 Detect changes with enhanced rename detection
+      - name: 🔍 Analyze changes
         id: changes
         run: |
           echo "🔍 Analyzing commit: ${{ github.event.head_commit.message }}"
-          
-          # FIXED: Enhanced file change detection with rename support
+
+          # Detect file changes
           CHANGED_FILES=$(git diff -M --name-only --diff-filter=AMR HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
           REMOVED_FILES=$(git diff -M --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
           
@@ -65,51 +55,47 @@ jobs:
           ALL_CHANGES=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$REMOVED_FILES" "$RENAMED_FILES" | grep -v '^$' | sort -u)
           TOTAL_CHANGES=$(echo "$ALL_CHANGES" | grep -v '^$' | wc -l)
           
-          echo "total-changes=$TOTAL_CHANGES" >> $GITHUB_OUTPUT
+          # Extract languages dynamically
+          DETECTED_LANGUAGES=""
+          VERNACULAR_LANGUAGES=""
           
-          if [ "$TOTAL_CHANGES" -gt 0 ]; then
-            echo "📝 Detected $TOTAL_CHANGES file changes"
-            echo "📄 Changed files:"
-            echo "$ALL_CHANGES" | while read -r file; do
-              echo "  - $file"
-            done
-            
-            # Set environment variables for the sync script
-            {
-              echo "CHANGED_FILES<<EOF"
-              echo "$CHANGED_FILES"
-              echo "EOF"
-              echo "REMOVED_FILES<<EOF"
-              echo "$REMOVED_FILES"
-              echo "EOF"
-              echo "RENAMED_FILES<<EOF"
-              echo "$RENAMED_FILES"
-              echo "EOF"
-            } >> $GITHUB_ENV
-          else
-            echo "ℹ️ No content changes detected"
-          fi
+          for file in $ALL_CHANGES; do
+            if [[ "$file" =~ ^content/([^/]+)/ ]]; then
+              LANG="${BASH_REMATCH[1]}"
+              if [[ ! "$DETECTED_LANGUAGES" =~ (^|[[:space:]])$LANG($|[[:space:]]) ]]; then
+                DETECTED_LANGUAGES="$DETECTED_LANGUAGES $LANG"
+                [ "$LANG" != "en" ] && VERNACULAR_LANGUAGES="$VERNACULAR_LANGUAGES $LANG"
+              fi
+            fi
+          done
+          
+          DETECTED_LANGUAGES=$(echo "$DETECTED_LANGUAGES" | xargs)
+          VERNACULAR_LANGUAGES=$(echo "$VERNACULAR_LANGUAGES" | xargs)
+          
+          echo "📊 $TOTAL_CHANGES files | Languages: ${DETECTED_LANGUAGES:-none}"
+          
+          # Set outputs and environment
+          echo "total-changes=$TOTAL_CHANGES" >> $GITHUB_OUTPUT
+          echo "detected-languages=$DETECTED_LANGUAGES" >> $GITHUB_OUTPUT
+          echo "vernacular-languages=$VERNACULAR_LANGUAGES" >> $GITHUB_OUTPUT
+          
+          # Set environment variables for the sync script
+          {
+            echo "CHANGED_FILES<<EOF"
+            echo "$CHANGED_FILES"
+            echo "EOF"
+            echo "REMOVED_FILES<<EOF"
+            echo "$REMOVED_FILES" 
+            echo "EOF"
+            echo "RENAMED_FILES<<EOF"
+            echo "$RENAMED_FILES"
+            echo "EOF"
+          } >> $GITHUB_ENV
 
       - name: ✅ Validate environment
         if: steps.changes.outputs.total-changes != '0'
         run: |
-          SECRETS_VALID=true
-          
-          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
-            echo "❌ Database configuration missing"
-            SECRETS_VALID=false
-          fi
-          
-          if [ -z "${{ secrets.GOOGLE_GEMINI_API_KEY }}" ]; then
-            echo "❌ API key configuration missing" 
-            SECRETS_VALID=false
-          fi
-          
-          if [ "$SECRETS_VALID" = "false" ]; then
-            exit 1
-          fi
-          
-          echo "✅ Environment validated"
+          [ -z "${{ secrets.DATABASE_URL }}" ] && { echo "❌ Missing DATABASE_URL"; exit 1; }
 
       - name: ⚙️ Setup Node.js
         if: steps.changes.outputs.total-changes != '0'
@@ -129,30 +115,48 @@ jobs:
         with:
           path: ~/.pnpm-store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-
 
       - name: 📋 Install dependencies
         if: steps.changes.outputs.total-changes != '0'
         run: pnpm install --frozen-lockfile --silent
 
+      - name: 🔄 Validate mappings
+        if: steps.changes.outputs.total-changes != '0'
+        run: |
+          VERNACULAR_LANGUAGES="${{ steps.changes.outputs.vernacular-languages }}"
+          MISSING_FILES=""
+          
+          if [ -n "$VERNACULAR_LANGUAGES" ]; then
+            for lang in $VERNACULAR_LANGUAGES; do
+              for type in author-mappings category-mappings tag-mappings; do
+                file="src/data/${type}.${lang}.json"
+                if [ ! -f "$file" ] || ! jq empty "$file" 2>/dev/null; then
+                  MISSING_FILES="$MISSING_FILES $file"
+                fi
+              done
+            done
+            
+            if [ -n "$MISSING_FILES" ]; then
+              echo "❌ Missing/invalid mapping files:$MISSING_FILES"
+              echo "💡 Create valid JSON mapping files for languages: $VERNACULAR_LANGUAGES"
+              exit 1
+            fi
+            
+            echo "✅ Mappings validated for: $VERNACULAR_LANGUAGES"
+          else
+            echo "✅ English-only content, no mappings needed"
+          fi
+
       - name: 🚀 Sync content
         if: steps.changes.outputs.total-changes != '0'
         uses: nick-invision/retry@v2
         with:
-          timeout_minutes: 5
+          timeout_minutes: 8
           max_attempts: 3
           retry_on: error
-          command: |
-            echo "🔄 Processing ${{ steps.changes.outputs.total-changes }} files"
-            echo "📊 Commit info:"
-            echo "  Author: ${{ github.event.head_commit.author.name }}"
-            echo "  Username: ${{ github.event.head_commit.author.username }}"
-            echo "  Message: ${{ github.event.head_commit.message }}"
-            echo "  Timestamp: ${{ github.event.head_commit.timestamp }}"
-            pnpm sync:github
+          command: pnpm sync:github
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           NODE_ENV: production
           COMMIT_AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
           COMMIT_AUTHOR_USERNAME: ${{ github.event.head_commit.author.username }}
@@ -161,29 +165,30 @@ jobs:
         if: always() && steps.changes.outputs.total-changes != '0'
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "## ✅ Content Sync Completed" >> $GITHUB_STEP_SUMMARY
-            echo "- **Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Username:** ${{ github.event.head_commit.author.username }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Files processed:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "## ❌ Content Sync Failed" >> $GITHUB_STEP_SUMMARY
-            echo "- **Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Username:** ${{ github.event.head_commit.author.username }}" >> $GITHUB_STEP_SUMMARY
+            echo "## ✅ Sync Completed" >> $GITHUB_STEP_SUMMARY
             echo "- **Files:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Languages:** ${{ steps.changes.outputs.detected-languages }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Mode:** Dynamic mapping-based" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Sync Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Languages:** ${{ steps.changes.outputs.detected-languages }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Common fixes:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Missing mappings: \`src/data/{type}.{lang}.json\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Series order: Process covers before episodes" >> $GITHUB_STEP_SUMMARY
+            echo "- Field names: Use \`series_title\`, \`sub_category\`" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: 🐛 Debug information
+      - name: 🐛 Debug info
         if: failure()
         run: |
-          echo "## 🐛 Debug Information"
-          echo "- Commit message: '${{ github.event.head_commit.message }}'"
-          echo "- Contains 'publish': ${{ contains(github.event.head_commit.message, 'publish') }}"
-          echo "- Author: ${{ github.event.head_commit.author.name }}"
-          echo "- Username: ${{ github.event.head_commit.author.username }}"
-          echo "- Changed files count: ${{ steps.changes.outputs.total-changes }}"
-          echo "- Environment variables set:"
-          env | grep -E '^(CHANGED_FILES|REMOVED_FILES|RENAMED_FILES|COMMIT_AUTHOR)=' || echo "  No change environment variables found"
+          echo "❌ FAILURE DEBUG:"
+          echo "Files: ${{ steps.changes.outputs.total-changes }}"
+          echo "Languages: ${{ steps.changes.outputs.detected-languages }}"
+          echo "Vernacular: ${{ steps.changes.outputs.vernacular-languages }}"
+          echo "Author: ${{ github.event.head_commit.author.username }}"
+          echo ""
+          echo "Mapping files:"
+          find src/data -name "*-mappings.*.json" 2>/dev/null | head -5 || echo "None found"
