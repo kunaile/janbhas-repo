@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "node --env-file=.env.local -r ts-node/register src/index.ts",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "node --env-file=.env.local -r tsx src/db/scripts/generate-migrations.ts",
     "db:migrate": "node --env-file=.env.local -r tsx ./src/db/migrate.ts",
     "db:reset": "node --env-file=.env.local -r tsx scripts/reset-database.ts",
     "db:update-authors": "node --env-file=.env.local -r tsx scripts/update-authors.ts",
@@ -30,7 +30,6 @@
   "packageManager": "pnpm@10.5.2",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "chalk": "^5.5.0",
     "drizzle-orm": "^0.44.4",
     "gray-matter": "^4.0.3",
     "pg": "^8.16.3"
