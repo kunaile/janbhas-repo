@@ -1,0 +1,12 @@
+{
+  "Story": "story",
+  "Short-Story": "short-story",
+  "Biography": "biography",
+  "Poetry": "poetry",
+  "Song": "song",
+  "Novel": "novel",
+  "Politics": "politics",
+  "Economics": "economics",
+  "Science": "science",
+  "Mathematics": "mathematics"
+}

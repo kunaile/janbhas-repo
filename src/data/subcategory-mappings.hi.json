@@ -1,25 +1,14 @@
 {
-  "subcategory_mappings": {
-    "लम्बी-कहानी": "long-story",
-    "बाल-कथाएँ": "children-stories",
-    "लोक-कथाएँ": "folk-tales",
-    "धार्मिक-कथाएँ": "religious-stories",
-    "ऐतिहासिक-कथाएँ": "historical-stories",
-    "रोमांच-कथाएँ": "adventure-stories",
-    "हास्य-कथाएँ": "humorous-stories",
-    "सामाजिक-कथाएँ": "social-stories",
-    "नैतिक-कहानी": "moral-story",
-    "प्रेम-कहानी": "love-story",
-    "रहस्य-कहानी": "mystery-story",
-    "भूत-कहानी": "ghost-story",
-    "पारिवारिक-कहानी": "family-story",
-    "निबंध": "essay",
-    "छंद": "verse",
-    "स्वतंत्र-छंद": "free-verse",
-    "हाइकु": "haiku",
-    "सॉनेट": "sonnet",
-    "बाल-गीत": "children-song",
-    "भजन": "devotional-song",
-    "देशभक्ति-गीत": "patriotic-song"
-  }
+  "लम्बी-कहानी": "long-story",
+  "बाल-कथाएँ": "children-stories",
+  "लोक-कथाएँ": "folk-tales",
+  "धार्मिक-कथाएँ": "religious-stories",
+  "ऐतिहासिक-कथाएँ": "historical-stories",
+  "रोमांच-कथाएँ": "adventure-stories",
+  "हास्य-कथाएँ": "humorous-stories",
+  "सामाजिक-कथाएँ": "social-stories",
+  "नैतिक-कहानी": "moral-story",
+  "प्रेम-कहानी": "love-story",
+  "रहस्य-कहानी": "mystery-story",
+  "भूत-कहानी": "ghost-story"
 }
