@@ -103,7 +103,7 @@ export function setCurrentEditorId(editorId: string): void {
   currentEditorId = editorId;
 }
 
-function getCurrentEditorId(): string {
+export function getCurrentEditorId(): string {
   if (!currentEditorId) {
     throw new Error('No editor context set. Call setCurrentEditorId() before database operations.');
   }

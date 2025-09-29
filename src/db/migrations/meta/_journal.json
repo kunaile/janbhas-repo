@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1754847326408,
-      "tag": "0000_lethal_argent",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1755098518990,
-      "tag": "0001_rich_scrambler",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1755115907565,
-      "tag": "0002_marvelous_cloak",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1755615690504,
-      "tag": "0003_optimal_supreme_intelligence",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1756409194924,
-      "tag": "0004_serious_human_fly",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1758898607742,
-      "tag": "0005_next_christian_walker",
+      "when": 1759120496061,
+      "tag": "0000_fluffy_sway",
       "breakpoints": true
     }
   ]

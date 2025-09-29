@@ -12,6 +12,7 @@
     "db:update-authors": "node --env-file=.env.local -r tsx scripts/update-authors.ts",
     "db:status": "node --env-file=.env.local -r tsx scripts/db-status.ts",
     "db:health": "node --env-file=.env.local -r tsx scripts/db-health.ts",
+    "sync:mappings": "node --env-file=.env.local -r tsx scripts/sync-mappings.ts",
     "sync:local": "node --env-file=.env.local -r tsx scripts/local-sync.ts",
     "sync:local:all": "node --env-file=.env.local -r tsx scripts/local-sync.ts --all",
     "sync:local:verbose": "node --env-file=.env.local -r tsx scripts/local-sync.ts --all --verbose",
