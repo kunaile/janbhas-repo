@@ -10,29 +10,45 @@ import {
   ValidationError
 } from '../services/contentProcessor/types';
 
+/**
+ * Language code to human name
+ */
 const LANGUAGE_NAMES: Record<string, string> = {
-  'hi': 'Hindi',
-  'bn': 'Bengali',
-  'ta': 'Tamil',
-  'te': 'Telugu',
-  'ml': 'Malayalam',
-  'kn': 'Kannada',
-  'gu': 'Gujarati',
-  'mr': 'Marathi',
-  'pa': 'Punjabi',
-  'or': 'Odia',
-  'en': 'English'
+  hi: 'Hindi',
+  bn: 'Bengali',
+  ta: 'Tamil',
+  te: 'Telugu',
+  ml: 'Malayalam',
+  kn: 'Kannada',
+  gu: 'Gujarati',
+  mr: 'Marathi',
+  pa: 'Punjabi',
+  or: 'Odia',
+  en: 'English',
 };
 
-// Mapping caches for all types
+/**
+ * Mappings store: keep raw exact keys and a normalized index.
+ * Avoid index signatures so we can safely keep a non-string sub-object.
+ */
+type MappingStore = {
+  raw: Record<string, string>;
+  norm: Record<string, string>;
+};
+
+/**
+ * Mapping caches for all types
+ */
 const mappingCaches = {
-  author: new Map<string, Record<string, string>>(),
-  category: new Map<string, Record<string, string>>(),
-  subcategory: new Map<string, Record<string, string>>(),
-  tag: new Map<string, Record<string, string>>()
+  author: new Map<string, MappingStore>(),
+  category: new Map<string, MappingStore>(),
+  subcategory: new Map<string, MappingStore>(),
+  tag: new Map<string, MappingStore>(),
 };
 
-// Global slug tracking for duplicate detection
+/**
+ * Global slug tracking for duplicate detection
+ */
 const usedSlugs = new Set<string>();
 
 /**
@@ -42,39 +58,39 @@ const usedSlugs = new Set<string>();
 export function normalizeFrontmatter(frontmatter: Frontmatter): NormalizedFrontmatter {
   const normalized: NormalizedFrontmatter = {
     title: frontmatter.title,
-    local_title: frontmatter.local_title || frontmatter.localTitle || '',
+    local_title: frontmatter.local_title || (frontmatter as any).localTitle || '',
     author: frontmatter.author,
     category: frontmatter.category,
-    lang: frontmatter.lang || frontmatter.language || '',
+    lang: frontmatter.lang || (frontmatter as any).language || '',
   };
 
   // Optional fields with priority resolution
-  if (frontmatter.sub_category || frontmatter.subCategory) {
-    normalized.sub_category = frontmatter.sub_category || frontmatter.subCategory;
+  if ((frontmatter as any).sub_category || (frontmatter as any).subCategory) {
+    normalized.sub_category = (frontmatter as any).sub_category || (frontmatter as any).subCategory;
   }
 
-  if (frontmatter.base_type || frontmatter.baseType) {
-    normalized.base_type = frontmatter.base_type || frontmatter.baseType;
+  if ((frontmatter as any).base_type || (frontmatter as any).baseType) {
+    normalized.base_type = (frontmatter as any).base_type || (frontmatter as any).baseType;
   }
 
   // UPDATED: Handle series_title instead of series_slug
-  if (frontmatter.series_title || frontmatter.seriesTitle) {
-    normalized.series_title = frontmatter.series_title || frontmatter.seriesTitle;
+  if ((frontmatter as any).series_title || (frontmatter as any).seriesTitle) {
+    normalized.series_title = (frontmatter as any).series_title || (frontmatter as any).seriesTitle;
   }
 
-  if (frontmatter.article_type || frontmatter.articleType) {
-    normalized.article_type = frontmatter.article_type || frontmatter.articleType;
+  if ((frontmatter as any).article_type || (frontmatter as any).articleType) {
+    normalized.article_type = (frontmatter as any).article_type || (frontmatter as any).articleType;
   }
 
   // Copy other fields as-is
-  normalized.thumbnail = frontmatter.thumbnail;
-  normalized.audio = frontmatter.audio;
-  normalized.words = frontmatter.words;
-  normalized.published = frontmatter.published;
-  normalized.featured = frontmatter.featured;
-  normalized.tags = frontmatter.tags;
-  normalized.episode = frontmatter.episode;
-  normalized.completed = frontmatter.completed;
+  normalized.thumbnail = (frontmatter as any).thumbnail;
+  normalized.audio = (frontmatter as any).audio;
+  normalized.words = (frontmatter as any).words;
+  normalized.published = (frontmatter as any).published;
+  normalized.featured = (frontmatter as any).featured;
+  normalized.tags = (frontmatter as any).tags;
+  normalized.episode = (frontmatter as any).episode;
+  normalized.completed = (frontmatter as any).completed;
 
   return normalized;
 }
@@ -93,7 +109,7 @@ export function validateFrontmatter(frontmatter: NormalizedFrontmatter, filePath
     local_title: !!frontmatter.local_title,
     author: !!frontmatter.author,
     category: !!frontmatter.category,
-    lang: !!frontmatter.lang
+    lang: !!frontmatter.lang,
   };
 
   if (!frontmatter.title) {
@@ -129,17 +145,43 @@ export function validateFrontmatter(frontmatter: NormalizedFrontmatter, filePath
     isValid: errors.length === 0,
     errors,
     warnings,
-    requiredFields
+    requiredFields,
   };
 }
 
 /**
- * Generic mapping loader for all types
+ * Accept both wrapped and flat JSON mapping shapes.
+ * - wrapped: { "author_mappings": { "Mark Twain": "..." } }
+ * - flat:    { "Mark Twain": "..." }
  */
-function loadMappings(
-  type: 'author' | 'category' | 'subcategory' | 'tag',
-  langCode: string
-): Record<string, string> {
+function asFlatMap(maybe: any, type: 'author' | 'category' | 'subcategory' | 'tag'): Record<string, string> {
+  if (maybe && typeof maybe === 'object') {
+    const wrapped = maybe[`${type}_mappings`];
+    if (wrapped && typeof wrapped === 'object') return wrapped as Record<string, string>;
+    return maybe as Record<string, string>;
+  }
+  return {};
+}
+
+/**
+ * Build a canonical normalized key for fuzzy-equal lookups.
+ */
+function normalizeKey(s: string): string {
+  return (s ?? '')
+    .toString()
+    .replace(/['"]/g, '')       // strip quotes
+    .replace(/\./g, '')         // remove dots
+    .replace(/[-_]/g, ' ')      // treat hyphen/underscore as space
+    .replace(/\s+/g, ' ')       // collapse spaces
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Load English (en) mappings for validation and display; build normalized index.
+ */
+function loadMappings(type: 'author' | 'category' | 'subcategory' | 'tag'): MappingStore {
+  const langCode = 'en'; // force English for validation & mapping lookup
   const cache = mappingCaches[type];
 
   if (cache.has(langCode)) {
@@ -149,67 +191,62 @@ function loadMappings(
   try {
     const mappingFile = join(__dirname, '../data', `${type}-mappings.${langCode}.json`);
     const fileContent = readFileSync(mappingFile, 'utf8');
-    const mappingData = JSON.parse(fileContent);
-    const mappings = mappingData[`${type}_mappings`] || {};
+    const parsed = JSON.parse(fileContent);
+    const base = asFlatMap(parsed, type);
 
-    cache.set(langCode, mappings);
-    console.log(`[INFO] Loaded ${Object.keys(mappings).length} ${type} mappings for ${langCode}`);
+    // Build normalized index
+    const normIndex: Record<string, string> = {};
+    for (const [k, v] of Object.entries(base)) {
+      normIndex[normalizeKey(k)] = v;
+    }
 
-    return mappings;
+    const store: MappingStore = { raw: base, norm: normIndex };
+    cache.set(langCode, store);
+    console.log(`[INFO] Loaded ${Object.keys(base).length} ${type} mappings for ${langCode}`);
+    return store;
   } catch (error) {
-    console.warn(`[WARN] Could not load ${type} mappings for ${langCode}: ${error}`);
-    const emptyMappings = {};
-    cache.set(langCode, emptyMappings);
-    return emptyMappings;
+    console.warn(`[WARN] Could not load ${type} mappings for en: ${error}`);
+    const empty: MappingStore = { raw: {}, norm: {} };
+    cache.set('en', empty);
+    return empty;
   }
 }
 
 /**
- * Get mapping with graceful fallback
+ * Get mapping using normalized lookup, falling back to exact and quote-trimmed keys.
+ * Returns success=false when none found; callers decide fallback behavior.
  */
-function getMapping(
-  text: string,
-  type: 'author' | 'category' | 'subcategory' | 'tag',
-  language: string
-): MappingResult {
-  let mappings: Record<string, string> = {};
+function getMapping(text: string, type: 'author' | 'category' | 'subcategory' | 'tag'): MappingResult {
+  const store = loadMappings(type);
 
-  switch (type) {
-    case 'author':
-      mappings = loadMappings('author', language);
-      break;
-    case 'category':
-      mappings = loadMappings('category', language);
-      break;
-    case 'subcategory':
-      mappings = loadMappings('subcategory', language);
-      break;
-    case 'tag':
-      mappings = loadMappings('tag', language);
-      break;
+  // 1) exact
+  const exact = store.raw[text];
+  if (exact) {
+    return { success: true, transliterated: exact, source: 'mapping' };
   }
 
-  // Check both original text and cleaned version
-  const cleanName = text.replace(/[''"]/g, '').trim();
-  const mapping = mappings[text] || mappings[cleanName];
-
-  if (mapping) {
-    return {
-      success: true,
-      transliterated: mapping.toLowerCase(),
-      source: 'mapping'
-    };
-  } else {
-    return {
-      success: false,
-      error: `No mapping found for ${type}: "${text}" (${language})`,
-      source: 'mapping'
-    };
+  // 2) quote-trimmed
+  const clean = (text ?? '').toString().replace(/['"]/g, '').trim();
+  if (clean && store.raw[clean]) {
+    return { success: true, transliterated: store.raw[clean], source: 'mapping' };
   }
+
+  // 3) normalized
+  const norm = normalizeKey(text);
+  const normHit = store.norm[norm];
+  if (normHit) {
+    return { success: true, transliterated: normHit, source: 'mapping' };
+  }
+
+  return {
+    success: false,
+    error: `No mapping found for ${type}: "${text}" (en)`,
+    source: 'fallback',
+  };
 }
 
 /**
- * Create slug from English title
+ * Create slug from English text (ASCII-friendly).
  */
 export function createSlugFromTitle(title: string): string {
   if (!title || typeof title !== 'string') {
@@ -232,7 +269,8 @@ export function createSlugFromTitle(title: string): string {
 }
 
 /**
- * Generate full slug: title + author + lang with duplicate detection
+ * Generate full slug: title + author + lang with duplicate detection.
+ * DECISION: Do NOT depend on author mappings; use the original author string.
  */
 export async function generateFullSlug(
   title: string,
@@ -240,23 +278,11 @@ export async function generateFullSlug(
   language: string,
   existingSlugs: Set<string> = usedSlugs
 ): Promise<SlugGenerationResult> {
-  // Create title slug
   const titleSlug = createSlugFromTitle(title);
+  const authorSlug = createSlugFromTitle(author || 'unknown-author');
+  const fullSlug = `${titleSlug}-by-${authorSlug}-${(language || 'en').toLowerCase()}`;
 
-  // Get author mapping
-  const authorMapping = getMapping(author, 'author', language);
-
-  if (!authorMapping.success) {
-    throw new Error(`Cannot generate slug - ${authorMapping.error}`);
-  }
-
-  // Create full slug: title-by-author-lang
-  const authorSlug = createSlugFromTitle(authorMapping.transliterated!);
-  const fullSlug = `${titleSlug}-by-${authorSlug}-${language.toLowerCase()}`;
-
-  // Check for duplicates
   const isDuplicate = existingSlugs.has(fullSlug);
-
   if (!isDuplicate) {
     existingSlugs.add(fullSlug);
   }
@@ -264,21 +290,22 @@ export async function generateFullSlug(
   return {
     slug: fullSlug,
     isDuplicate,
-    conflictingFile: isDuplicate ? 'unknown' : undefined
+    conflictingFile: isDuplicate ? 'unknown' : undefined,
   };
 }
 
 /**
- * MAIN: Mapping-based transliteration without Gemini API
+ * MAIN: Mapping-based transliteration without external APIs.
+ * Uses identity fallback on missing mapping to keep pipelines flowing.
  */
 export async function batchTransliterateTexts(
-  items: Array<{
+  items: {
     text: string;
     type: 'title' | 'author' | 'category' | 'subcategory' | 'tag' | 'series';
     language: string;
-    englishTitle?: string; // For titles, use this for slug generation
-    author?: string; // For title+author slug generation
-  }>
+    englishTitle?: string;
+    author?: string;
+  }[]
 ): Promise<Map<string, string>> {
   const results = new Map<string, string>();
 
@@ -297,7 +324,8 @@ export async function batchTransliterateTexts(
           const slugResult = await generateFullSlug(item.englishTitle, item.author, item.language);
           if (slugResult.isDuplicate) {
             console.warn(`[WARN] Duplicate slug detected: "${slugResult.slug}"`);
-            result = null;
+            // Keep the slug but warn, so downstream doesn’t see “missing”
+            result = slugResult.slug;
           } else {
             result = slugResult.slug;
             console.log(`[OK] Generated slug: "${item.englishTitle}" + "${item.author}" -> "${result}"`);
@@ -311,14 +339,15 @@ export async function batchTransliterateTexts(
         result = null;
       }
     } else {
-      const mappingResult = getMapping(item.text, item.type as 'author' | 'category' | 'subcategory' | 'tag', item.language);
+      const mappingResult = getMapping(item.text, item.type as 'author' | 'category' | 'subcategory' | 'tag');
 
       if (mappingResult.success) {
         result = mappingResult.transliterated!;
         console.log(`[OK] Used ${item.type} mapping: "${item.text}" -> "${result}"`);
       } else {
-        console.warn(`[WARN] ${mappingResult.error}`);
-        result = null;
+        // Identity fallback to avoid aborting the pipeline
+        result = item.text;
+        console.warn(`[WARN] ${mappingResult.error} — using identity fallback`);
       }
     }
 
@@ -334,36 +363,49 @@ export async function batchTransliterateTexts(
 }
 
 /**
- * Transliteration helpers for author, category, subcategory, tag
+ * Author transliteration with identity fallback.
  */
-export async function transliterateAuthorName(authorName: string, langCode: string = 'hi'): Promise<string> {
-  const mappingResult = getMapping(authorName, 'author', langCode);
+export async function transliterateAuthorName(authorName: string): Promise<string> {
+  const mappingResult = getMapping(authorName, 'author');
   if (!mappingResult.success) {
-    throw new Error(mappingResult.error);
+    console.warn(`[WARN] ${mappingResult.error} — using identity fallback`);
+    return authorName;
   }
   return mappingResult.transliterated!;
 }
 
-export async function transliterateCategory(categoryName: string, langCode: string = 'hi'): Promise<string> {
-  const mappingResult = getMapping(categoryName, 'category', langCode);
+/**
+ * Category transliteration with identity fallback.
+ */
+export async function transliterateCategory(categoryName: string): Promise<string> {
+  const mappingResult = getMapping(categoryName, 'category');
   if (!mappingResult.success) {
-    throw new Error(mappingResult.error);
+    console.warn(`[WARN] ${mappingResult.error} — using identity fallback`);
+    return categoryName;
   }
   return mappingResult.transliterated!;
 }
 
-export async function transliterateSubCategory(subCategoryName: string, langCode: string = 'hi'): Promise<string> {
-  const mappingResult = getMapping(subCategoryName, 'subcategory', langCode);
+/**
+ * Subcategory transliteration with identity fallback.
+ */
+export async function transliterateSubCategory(subCategoryName: string): Promise<string> {
+  const mappingResult = getMapping(subCategoryName, 'subcategory');
   if (!mappingResult.success) {
-    throw new Error(mappingResult.error);
+    console.warn(`[WARN] ${mappingResult.error} — using identity fallback`);
+    return subCategoryName;
   }
   return mappingResult.transliterated!;
 }
 
-export async function transliterateTag(tagName: string, langCode: string = 'hi'): Promise<string> {
-  const mappingResult = getMapping(tagName, 'tag', langCode);
+/**
+ * Tag transliteration with identity fallback.
+ */
+export async function transliterateTag(tagName: string): Promise<string> {
+  const mappingResult = getMapping(tagName, 'tag');
   if (!mappingResult.success) {
-    throw new Error(mappingResult.error);
+    console.warn(`[WARN] ${mappingResult.error} — using identity fallback`);
+    return tagName;
   }
   return mappingResult.transliterated!;
 }
@@ -390,18 +432,16 @@ export function normalizeText(text: string): string {
 }
 
 export function getLanguageName(langCode: string): string {
-  return LANGUAGE_NAMES[langCode.toLowerCase()] || langCode.toUpperCase();
+  return LANGUAGE_NAMES[(langCode || '').toLowerCase()] || (langCode || '').toUpperCase();
 }
 
-/**
- * Get all mappings for debugging/admin purposes
- */
-export function getAllMappings(langCode: string = 'hi') {
+export function getAllMappings(_langCode: string = 'en') {
+  // Files are en-only for validation layer; return raw maps
   return {
-    authors: { ...loadMappings('author', langCode) },
-    categories: { ...loadMappings('category', langCode) },
-    subcategories: { ...loadMappings('subcategory', langCode) },
-    tags: { ...loadMappings('tag', langCode) }
+    authors: { ...loadMappings('author').raw },
+    categories: { ...loadMappings('category').raw },
+    subcategories: { ...loadMappings('subcategory').raw },
+    tags: { ...loadMappings('tag').raw },
   };
 }
 
@@ -413,7 +453,7 @@ export function clearMappingCache(type?: 'author' | 'category' | 'subcategory' |
     mappingCaches[type].clear();
     console.log(`[INFO] Cleared ${type} mapping cache`);
   } else {
-    Object.values(mappingCaches).forEach(cache => cache.clear());
+    (Object.values(mappingCaches) as Array<Map<string, MappingStore>>).forEach((cache) => cache.clear());
     console.log(`[INFO] Cleared all mapping caches`);
   }
 }
@@ -427,17 +467,21 @@ export function clearSlugCache() {
 }
 
 /**
- * Add new mapping programmatically
+ * Add new mapping programmatically; maintains normalized index.
  */
 export function addMapping(
   type: 'author' | 'category' | 'subcategory' | 'tag',
-  langCode: string,
   original: string,
   transliterated: string
 ) {
-  const mappings = loadMappings(type, langCode);
-  mappings[original] = transliterated;
-  mappingCaches[type].set(langCode, mappings);
+  const langCode = 'en';
+  const store = loadMappings(type);
+  // Update raw
+  store.raw[original] = transliterated;
+  // Update normalized
+  store.norm[normalizeKey(original)] = transliterated;
+  // Persist in cache
+  mappingCaches[type].set(langCode, store);
   console.log(`[INFO] Added ${type} mapping: ${original} -> ${transliterated}`);
 }
 
@@ -445,27 +489,23 @@ export function addMapping(
  * Validate that all required mappings exist
  */
 export function validateMappings(
-  items: Array<{ text: string; type: string; language: string }>
+  items: Array<{ text: string; type: string }>
 ): { valid: string[]; missing: string[] } {
   const valid: string[] = [];
   const missing: string[] = [];
 
   for (const item of items) {
     if (item.type === 'title' || item.type === 'series') {
-      // Titles are handled via frontmatter, skip validation
+      // Titles are handled via slug generation, skip validation
       continue;
     }
 
-    const mappingResult = getMapping(
-      item.text,
-      item.type as 'author' | 'category' | 'subcategory' | 'tag',
-      item.language
-    );
+    const mappingResult = getMapping(item.text, item.type as 'author' | 'category' | 'subcategory' | 'tag');
 
     if (mappingResult.success) {
       valid.push(`${item.type}:${item.text}`);
     } else {
-      missing.push(`${item.type}:${item.text} (${item.language})`);
+      missing.push(`${item.type}:${item.text}`);
     }
   }
 
