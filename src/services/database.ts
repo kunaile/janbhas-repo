@@ -530,8 +530,116 @@ export async function upsertSeries(seriesData: SeriesData): Promise<string> {
   }
 }
 
+
+/**
+ * Portable helper: compute denormalized names for an article from base and translation tables.
+ * Queries only the references provided (author/category/subCategory), with safe fallbacks.
+ */
+type DBConn = ReturnType<typeof getDb>;
+type DenormResult = {
+  authorName: string;
+  authorLocalName: string | null;
+  categoryName: string;
+  categoryLocalName: string | null;
+  subCategoryName: string | null;
+  subCategoryLocalName: string | null;
+};
+
+export async function computeArticleDenormalizedFields(
+  db: DBConn,
+  args: { languageId: string; authorId?: string | null; categoryId?: string | null; subCategoryId?: string | null; }
+): Promise<DenormResult> {
+  const unknownAuthor = 'Unknown';
+  const uncategorized = 'Uncategorized';
+
+  // Defaults
+  let authorName = unknownAuthor;
+  let authorLocalName: string | null = null;
+  let categoryName = uncategorized;
+  let categoryLocalName: string | null = null;
+  let subCategoryName: string | null = null;
+  let subCategoryLocalName: string | null = null;
+
+  // Author base + translation
+  if (args.authorId) {
+    const [aBase] = await db.select({ name: authors.name })
+      .from(authors)
+      .where(and(eq(authors.id, args.authorId), isNull(authors.deletedAt)))
+      .limit(1);
+
+    if (aBase?.name) authorName = aBase.name;
+
+    const aTr = await db.select()
+      .from(authorTranslations)
+      .where(and(
+        eq(authorTranslations.authorId, args.authorId),
+        eq(authorTranslations.languageId, args.languageId),
+        isNull(authorTranslations.deletedAt)
+      ))
+      .limit(1);
+
+    const aLocal = aTr[0] ? ((aTr[0] as any).localName ?? (aTr[0] as any).local_name ?? null) : null;
+    authorLocalName = aLocal ?? authorName;
+  }
+
+  // Category base + translation
+  if (args.categoryId) {
+    const [cBase] = await db.select({ name: categories.name })
+      .from(categories)
+      .where(and(eq(categories.id, args.categoryId), isNull(categories.deletedAt)))
+      .limit(1);
+
+    if (cBase?.name) categoryName = cBase.name;
+
+    const cTr = await db.select()
+      .from(categoryTranslations)
+      .where(and(
+        eq(categoryTranslations.categoryId, args.categoryId),
+        eq(categoryTranslations.languageId, args.languageId),
+        isNull(categoryTranslations.deletedAt)
+      ))
+      .limit(1);
+
+    const cLocal = cTr[0] ? ((cTr[0] as any).localName ?? (cTr[0] as any).local_name ?? null) : null;
+    categoryLocalName = cLocal ?? categoryName;
+  }
+
+  // Sub-category base + translation (optional)
+  if (args.subCategoryId) {
+    const [scBase] = await db.select({ name: subCategories.name })
+      .from(subCategories)
+      .where(and(eq(subCategories.id, args.subCategoryId), isNull(subCategories.deletedAt)))
+      .limit(1);
+
+    if (scBase?.name) subCategoryName = scBase.name ?? null;
+
+    const scTr = await db.select()
+      .from(subCategoryTranslations)
+      .where(and(
+        eq(subCategoryTranslations.subCategoryId, args.subCategoryId),
+        eq(subCategoryTranslations.languageId, args.languageId),
+        isNull(subCategoryTranslations.deletedAt)
+      ))
+      .limit(1);
+
+    const scLocal = scTr[0] ? ((scTr[0] as any).localName ?? (scTr[0] as any).local_name ?? null) : null;
+    subCategoryLocalName = scLocal ?? subCategoryName;
+  }
+
+  return {
+    authorName,
+    authorLocalName,
+    categoryName,
+    categoryLocalName,
+    subCategoryName,
+    subCategoryLocalName,
+  };
+}
+
+
 /**
  * Updated upsert article - CLEANED (removed publishedDate and duration)
+ * Populates denormalized names via computeArticleDenormalizedFields (portable, reusable).
  */
 export async function upsertArticle(articleData: ArticleData): Promise<void> {
   const db = getDb();
@@ -546,27 +654,42 @@ export async function upsertArticle(articleData: ArticleData): Promise<void> {
     ))
     .limit(1);
 
+  // Compute denormalized names once (queries only what IDs exist)
+  const denorm = await computeArticleDenormalizedFields(db, {
+    languageId: articleData.languageId,
+    authorId: articleData.authorId ?? null,
+    categoryId: articleData.categoryId ?? null,
+    subCategoryId: articleData.subCategoryId ?? null,
+  });
+
   const articleValues = {
     slug: articleData.slug,
     title: articleData.title,
-    localTitle: articleData.localTitle,
-    shortDescription: articleData.shortDescription,
+    localTitle: articleData.localTitle ?? null,
+    shortDescription: articleData.shortDescription ?? null,
     markdownContent: articleData.markdownContent,
-    thumbnailUrl: articleData.thumbnailUrl,
-    audioUrl: articleData.audioUrl,
-    wordCount: articleData.wordCount,
+    thumbnailUrl: articleData.thumbnailUrl ?? null,
+    audioUrl: articleData.audioUrl ?? null,
+    wordCount: articleData.wordCount ?? null,
     isPublished: articleData.isPublished,
     isFeatured: articleData.isFeatured || false,
     languageId: articleData.languageId,
-    categoryId: articleData.categoryId,
-    subCategoryId: articleData.subCategoryId,
-    authorId: articleData.authorId,
+    categoryId: articleData.categoryId ?? null,
+    subCategoryId: articleData.subCategoryId ?? null,
+    authorId: articleData.authorId ?? null,
     editorId: articleData.editorId,
-    seriesId: articleData.seriesId,
-    episodeNumber: articleData.episodeNumber,
+    seriesId: articleData.seriesId ?? null,
+    episodeNumber: articleData.episodeNumber ?? null,
     articleType: articleData.articleType || 'standard',
-    authorName: 'Unknown', // Will be updated by triggers
-    categoryName: 'Uncategorized', // Will be updated by triggers
+
+    // Denormalized names (canonical + local)
+    authorName: denorm.authorName,
+    categoryName: denorm.categoryName,
+    subCategoryName: denorm.subCategoryName ?? null,
+    authorLocalName: denorm.authorLocalName,
+    categoryLocalName: denorm.categoryLocalName,
+    subCategoryLocalName: denorm.subCategoryLocalName,
+
     createdBy: editorId,
     updatedBy: editorId,
   };

@@ -1,5 +1,5 @@
 ---
-author: mbrose Bierce
+author: Ambrose Bierce
 title: Owl Creek Pul Ki Ghatana
 local_title: आउल क्रीक पुल की घटना
 lang: hi
