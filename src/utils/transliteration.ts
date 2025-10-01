@@ -232,7 +232,7 @@ export function createSlugFromTitle(title: string): string {
 }
 
 /**
- * Generate full slug: title + author with duplicate detection
+ * Generate full slug: title + author + lang with duplicate detection
  */
 export async function generateFullSlug(
   title: string,
@@ -250,9 +250,9 @@ export async function generateFullSlug(
     throw new Error(`Cannot generate slug - ${authorMapping.error}`);
   }
 
-  // Create full slug: title-by-author
+  // Create full slug: title-by-author-lang
   const authorSlug = createSlugFromTitle(authorMapping.transliterated!);
-  const fullSlug = `${titleSlug}-by-${authorSlug}`;
+  const fullSlug = `${titleSlug}-by-${authorSlug}-${language.toLowerCase()}`;
 
   // Check for duplicates
   const isDuplicate = existingSlugs.has(fullSlug);
@@ -292,13 +292,12 @@ export async function batchTransliterateTexts(
     let result: string | null = null;
 
     if (item.type === 'title' || item.type === 'series') {
-      // For titles, generate full slug: title + author
       if (item.englishTitle && item.author) {
         try {
           const slugResult = await generateFullSlug(item.englishTitle, item.author, item.language);
           if (slugResult.isDuplicate) {
             console.warn(`[WARN] Duplicate slug detected: "${slugResult.slug}"`);
-            result = null; // Will be handled by error processing
+            result = null;
           } else {
             result = slugResult.slug;
             console.log(`[OK] Generated slug: "${item.englishTitle}" + "${item.author}" -> "${result}"`);
@@ -312,7 +311,6 @@ export async function batchTransliterateTexts(
         result = null;
       }
     } else {
-      // For author, category, subcategory, tag - use mappings
       const mappingResult = getMapping(item.text, item.type as 'author' | 'category' | 'subcategory' | 'tag', item.language);
 
       if (mappingResult.success) {
@@ -327,7 +325,6 @@ export async function batchTransliterateTexts(
     if (result) {
       results.set(item.text, result);
     } else {
-      // Graceful failure - don't add to results map
       console.warn(`[SKIP] Skipping "${item.text}" - no translation available`);
     }
   }
@@ -337,7 +334,7 @@ export async function batchTransliterateTexts(
 }
 
 /**
- * Enhanced individual transliteration functions with mapping-only
+ * Transliteration helpers for author, category, subcategory, tag
  */
 export async function transliterateAuthorName(authorName: string, langCode: string = 'hi'): Promise<string> {
   const mappingResult = getMapping(authorName, 'author', langCode);
@@ -372,14 +369,13 @@ export async function transliterateTag(tagName: string, langCode: string = 'hi')
 }
 
 /**
- * Generate slug from English title (legacy function - now uses title + author)
+ * Generate slug from English title (legacy fallback)
  */
 export async function generateSlug(englishTitle: string, author?: string, language?: string): Promise<string> {
   if (author && language) {
     const slugResult = await generateFullSlug(englishTitle, author, language);
     return slugResult.slug;
   }
-  // Fallback to title-only slug
   return createSlugFromTitle(englishTitle);
 }
 
