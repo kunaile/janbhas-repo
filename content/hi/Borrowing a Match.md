@@ -1,15 +1,13 @@
 ---
-author: स्टीफन लीकॉक
-title: उधार की माचिस
+author: Stephen Leacock
+title: Udhaar Ki Machis
+local_title: उधार की माचिस
 lang: hi
-category: लघु-कथा
-sub-category:
+category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1757706651/Borrowing-A-Match_hfvlm2.jpg
-audio:
 words: 527
-published: true
-featured: true
-tags:
+published: false
+featured: false
 --- 
 
 आपको लग सकता है कि सड़क पर माचिस माँगना एक बहुत ही आसान काम है। लेकिन जिस किसी ने भी यह कोशिश की है, वह आपको यक़ीन दिलाएगा कि ऐसा नहीं है। और वह मेरी पिछली शाम के अनुभव को सच साबित करेगा।

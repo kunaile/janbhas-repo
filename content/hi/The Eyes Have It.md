@@ -1,14 +1,13 @@
 ---
-author: फिलिप के. डिक
-title: आँखों का खेल
+author: Philip K. Dick
+title: Aankhon Ka Khel
+local_title: आँखों का खेल
 lang: hi
-category: लघु-कथा
-sub-category:
+category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/The-Eyes-Have-It_b0poac.jpg
-audio:
 words: 1203
-published: true
-featured: true
+published: false
+featured: false
 ---
 
 यह बिल्कुल इत्तेफ़ाक़ था कि मैंने दूसरे ग्रह के जीवों के इस भयानक हमले का पता लगाया। मैंने अब तक इसके बारे में कुछ नहीं किया, क्योंकि मुझे सच कहूँ तो कुछ समझ ही नहीं आ रहा। मैंने सरकार को एक लंबी चिट्ठी लिखी, पर उन्होंने जवाब में मुझे घरों की मरम्मत और रखरखाव के तरीक़ों पर एक सरकारी पैम्फलेट भेज दिया। पर अब मुझे एहसास होता है कि मैं अकेला नहीं हूँ। यह बात शायद सबको पता है, और हो सकता है, सब कुछ क़ाबू में भी हो।

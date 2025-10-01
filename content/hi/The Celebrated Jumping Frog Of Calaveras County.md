@@ -1,15 +1,13 @@
 ---
-author: मार्क ट्वेन
-title: कैलावेरस काउंटी का चैंपियन मेंढक
+author: Mark Twain
+title: Calaveras County Ka Champion Medhak
+local_title: कैलावेरस काउंटी का चैंपियन मेंढक
 lang: hi
-category: लघु-कथा
-sub-category:
+category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1758339449/The-Celebrated-Jumping-Frog-Of-Calaveras-County_qqcekv.jpg
-audio:
 words: 1886
-published: true
-featured: true
-tags:
+published: false
+featured: false
 ---
 
 अपने एक दोस्त के कहने पर, जिसने मुझे पूर्व से पत्र लिखा था, मैं मिलनसार और बातूनी बूढ़े **साइमन व्हीलर** से मिला। मेरे दोस्त ने मुझसे उसके बचपन के साथी, लियोनिडास डब्ल्यू. स्माइली के बारे में पूछने को कहा था, और मैं आपको इसका नतीजा बताता हूँ।

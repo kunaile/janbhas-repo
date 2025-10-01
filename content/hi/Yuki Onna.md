@@ -1,14 +1,13 @@
 ---
-author: लैफकाडियो हर्न
-title: युकी-ओन्ना
+author: Lafcadio Hern
+title: Yuki Onna
+local_title: युकी-ओन्ना
 lang: hi
-category: लघु-कथा
-sub-category:
+category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/Yuki-Onna_ixdqr7.jpg
-audio:
 words: 1216
-published: true
-featured: true
+published: false
+featured: false
 ---
 
 जापान के मुसाशी प्रांत के एक गाँव में, मोसाकू और मिनोकिची नाम के दो लकड़हारे रहते थे। मोसाकू एक बूढ़ा आदमी था और मिनोकिची अठारह साल का नौजवान था। वे हर दिन जंगल में लकड़ियाँ काटने जाते थे। जंगल के रास्ते में एक नदी थी, जिसे वे नाव से पार करते थे।

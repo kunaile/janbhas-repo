@@ -1,15 +1,13 @@
 ---
-author: mark twain
+author: Mark Twain
 title: The Celebrated Jumping Frog Of Calaveras County
+local_title: The Celebrated Jumping Frog Of Calaveras County
 lang: en
-category: short-story
-sub-category:
+category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1758339449/The-Celebrated-Jumping-Frog-Of-Calaveras-County_qqcekv.jpg
-audio:
 words: 2577
-published: true
-featured: true
-tags:
+published: false
+featured: false
 ---
 
 In compliance with the request of a friend of mine, who wrote me from the East, I called on good-natured, garrulous old Simon Wheeler, and inquired after my friend's friend, Leonidas W. Smiley, as requested to do, and I hereunto append the result. I have a lurking suspicion that Leonidas W. Smiley is a myth; that my friend never knew such a personage; and that he only conjectured that, if I asked old Wheeler about him, it would remind him of his infamous Jim Smiley, and he would go to work and bore me nearly to death with some infernal reminiscence of him as long and tedious as it should be useless for me. If that was the design, it certainly succeeded.
