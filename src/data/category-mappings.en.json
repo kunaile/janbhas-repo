@@ -1,12 +1,17 @@
 {
+  "Biography": "biography",
+  "Essay": "essay",
+  "Novel": "novel",
   "Story": "story",
   "Short-Story": "short-story",
-  "Biography": "biography",
   "Poetry": "poetry",
-  "Song": "song",
-  "Novel": "novel",
+  "Finance": "finance",
+  "Business": "business",
+  "History": "history",
   "Politics": "politics",
   "Economics": "economics",
   "Science": "science",
-  "Mathematics": "mathematics"
+  "Tech": "tech",
+  "Math": "math",
+  "Sports": "sports"
 }

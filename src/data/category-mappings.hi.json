@@ -1,12 +1,17 @@
 {
-  "कहानी": "story",
-  "लघु-कथा": "short-story",
-  "जीवनी": "biography",
-  "कविता": "poetry",
-  "गीत": "song",
-  "उपन्यास": "novel",
-  "राजनीति": "politics",
-  "अर्थशास्त्र": "economics",
-  "विज्ञान": "science",
-  "गणित": "mathematics"
+  "Biography": "जीवनी",
+  "Essay": "निबंध",
+  "Novel": "उपन्यास",
+  "Story": "कहानी",
+  "Short-Story": "लघु-कथा",
+  "Poetry": "कविता/काव्य",
+  "Finance": "वित्त",
+  "Business": "व्यापार",
+  "History": "इतिहास",
+  "Politics": "राजनीति",
+  "Economics": "अर्थशास्त्र",
+  "Science": "विज्ञान",
+  "Tech": "तकनीक",
+  "Math": "गणित",
+  "Sports": "खेल"
 }

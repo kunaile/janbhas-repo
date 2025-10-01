@@ -1,14 +1,4 @@
 {
-  "long-story": "long-story",
-  "children-stories": "children-stories",
-  "folk-tales": "folk-tales",
-  "religious-stories": "religious-stories",
-  "historical-stories": "historical-stories",
-  "adventure-stories": "adventure-stories",
-  "humorous-stories": "humorous-stories",
-  "social-stories": "social-stories",
-  "moral-story": "moral-story",
-  "love-story": "love-story",
-  "mystery-story": "mystery-story",
-  "ghost-story": "ghost-story"
-  }
+  "Fiction": "fiction",
+  "Non-Fiction": "non-fiction"
+}

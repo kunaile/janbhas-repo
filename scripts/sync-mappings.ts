@@ -96,82 +96,85 @@ async function syncEntityMappings({
 
   const refMap = new Map<string, string>();
 
-  for (const [localName, englishName] of Object.entries(enMap) as [string, string][]) {
+  // Step 1: Process English mappings first to establish baseline entities
+  // Since English files now have English keys -> English/slug values
+  for (const [englishKey, englishValue] of Object.entries(enMap) as [string, string][]) {
     let refId = "";
-    const officialEnglish = String(englishName);
-    const officialLocal = String(localName);
-    console.log(`[EN] Processing ${kind}: Local='${officialLocal}', English='${officialEnglish}'`);
+    console.log(`[EN] Processing ${kind}: Key='${englishKey}', Value='${englishValue}'`);
 
     switch (kind) {
       case "author":
-        refId = await findOrCreateAuthor({ name: officialEnglish, localName: null });
+        // For authors, use the key as the name (both key and value are same for English)
+        refId = await findOrCreateAuthor({ name: englishKey, localName: null });
         break;
       case "category":
-        refId = await findOrCreateCategory({ name: officialEnglish, localName: null });
+        // For categories, use the key as display name, value as internal slug
+        refId = await findOrCreateCategory({ name: englishValue, localName: null });
         break;
       case "subcategory":
         console.log("[SKIP] Subcategory syncing requires category ID, skipping initial insert");
         continue;
       case "tag":
+        // For tags, use the key as display name, value as slug
         refId = await findOrCreateTag({
-          name: officialEnglish,
+          name: englishKey,
           localName: null,
-          slug: officialEnglish.replace(/\s+/g, "-").toLowerCase(),
+          slug: englishValue,
         });
         break;
     }
     console.log(`[EN] Upserted ${kind} with ID: ${refId}`);
-    refMap.set(officialEnglish, refId);
-    if (officialLocal === officialEnglish) {
-      refMap.set(officialLocal, refId);
-    }
+    refMap.set(englishKey, refId); // Map English key to database ID
   }
 
+  // Step 2: Process translation files (non-English)
+  // Now English keys -> Local language values
   for (const [langCode, filepath] of mappingFiles.filter(([lang]) => lang !== "en")) {
     console.log(`Processing language '${langCode}' mappings for ${kind}...`);
     const data = loadJson(filepath) as MappingFile;
     const languageId = await findOrCreateLanguage({ code: langCode, name: langCode });
     console.log(`Language '${langCode}' resolved to ID: ${languageId}`);
 
-    for (const [localNameRaw, englishNameRaw] of Object.entries(data) as [string, string][]) {
-      if (typeof englishNameRaw !== "string") {
-        console.warn(`Skipping invalid English name for local '${localNameRaw}':`, englishNameRaw);
+    for (const [englishKey, localValue] of Object.entries(data) as [string, string][]) {
+      if (typeof localValue !== "string") {
+        console.warn(`Skipping invalid local value for English key '${englishKey}':`, localValue);
         continue;
       }
-      const localName = String(localNameRaw);
-      const englishName = englishNameRaw;
-      console.log(`[${langCode}] Mapping: Local='${localName}', English='${englishName}'`);
 
-      let refId = refMap.get(englishName) ?? "";
+      console.log(`[${langCode}] Mapping: EnglishKey='${englishKey}', LocalValue='${localValue}'`);
+
+      let refId = refMap.get(englishKey) ?? "";
 
       if (!refId) {
-        console.log(`[${langCode}] English reference not found, creating ${kind} '${englishName}'`);
+        console.log(`[${langCode}] English reference not found for '${englishKey}', creating ${kind}`);
         switch (kind) {
           case "author":
-            refId = await findOrCreateAuthor({ name: englishName, localName: null });
+            refId = await findOrCreateAuthor({ name: englishKey, localName: null });
             break;
           case "category":
-            refId = await findOrCreateCategory({ name: englishName, localName: null });
+            // Use a default slug based on English key if not found in English mappings
+            refId = await findOrCreateCategory({ name: englishKey.toLowerCase().replace(/\s+/g, "-"), localName: null });
             break;
           case "subcategory":
             console.log("[SKIP] Subcategory syncing requires category ID, skipping");
             continue;
           case "tag":
             refId = await findOrCreateTag({
-              name: englishName,
+              name: englishKey,
               localName: null,
-              slug: englishName.replace(/\s+/g, "-").toLowerCase(),
+              slug: englishKey.toLowerCase().replace(/\s+/g, "-"),
             });
             break;
         }
         console.log(`[${langCode}] Created ${kind} with ID: ${refId}`);
-        refMap.set(englishName, refId);
+        refMap.set(englishKey, refId);
       }
 
+      // Insert translation: English key maps to local language value
       await upsertTranslations({
         mappingType: kind,
         refId,
-        localName,
+        localName: localValue, // This is now the localized name
         languageId,
         db,
       });
