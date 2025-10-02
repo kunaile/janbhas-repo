@@ -1,5 +1,6 @@
 // scripts/db-status.ts
 
+
 import { createDbConnection, getDb } from '../src/db';
 import { sql } from 'drizzle-orm';
 
@@ -173,7 +174,7 @@ async function checkDatabaseStatus() {
       log.warn('Could not retrieve table statistics');
     }
 
-    // Check database indexes
+    // Check database indexes (compatibility fix)
     console.log('\n🔍 Index Status:');
     try {
       const indexResult = await db.execute(sql`

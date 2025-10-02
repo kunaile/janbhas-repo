@@ -1,5 +1,6 @@
 // scripts/db-health.ts
 
+
 import { createDbConnection, getDb } from '../src/db';
 import { articles, authors, categories, editors, languages, subCategories, tags, series } from '../src/db/schema';
 import { sql, count, isNull } from 'drizzle-orm';
@@ -40,14 +41,14 @@ async function checkDatabaseHealth() {
     const [tagCount] = await db.select({ count: count() }).from(tags).where(isNull(tags.deletedAt));
     const [editorCount] = await db.select({ count: count() }).from(editors).where(isNull(editors.deletedAt));
     const [articleCount] = await db.select({ count: count() }).from(articles).where(isNull(articles.deletedAt));
-    const [seriesCount] = await db.select({ count: count() }).from(series).where(isNull(series.deletedAt)); // NEW
+    const [seriesCount] = await db.select({ count: count() }).from(series).where(isNull(series.deletedAt));
     const [publishedCount] = await db.select({ count: count() }).from(articles)
       .where(sql`deleted_at IS NULL AND is_published = true`);
     const [featuredCount] = await db.select({ count: count() }).from(articles)
       .where(sql`deleted_at IS NULL AND is_featured = true`);
-    const [publishedSeriesCount] = await db.select({ count: count() }).from(series) // NEW
+    const [publishedSeriesCount] = await db.select({ count: count() }).from(series)
       .where(sql`deleted_at IS NULL AND is_published = true`);
-    const [completedSeriesCount] = await db.select({ count: count() }).from(series) // NEW
+    const [completedSeriesCount] = await db.select({ count: count() }).from(series)
       .where(sql`deleted_at IS NULL AND is_complete = true`);
 
     console.log(`  • Languages: ${languageCount.count}`);
@@ -60,7 +61,6 @@ async function checkDatabaseHealth() {
     console.log(`  • Published Articles: ${publishedCount.count}`);
     console.log(`  • Featured Articles: ${featuredCount.count}`);
     console.log(`  • Draft Articles: ${articleCount.count - publishedCount.count}`);
-    // Series statistics
     console.log(`  • Total Series: ${seriesCount.count}`);
     console.log(`  • Published Series: ${publishedSeriesCount.count}`);
     console.log(`  • Completed Series: ${completedSeriesCount.count}`);
@@ -246,11 +246,10 @@ async function checkDatabaseHealth() {
       console.log('  ✓ All featured content is published');
     }
 
-    // Check for content without proper metadata
+    // Check for content without proper metadata (removed published_date)
     const metadataResult = await db.execute(sql`
       SELECT 
         COUNT(CASE WHEN word_count IS NULL OR word_count = 0 THEN 1 END) as missing_word_count,
-        COUNT(CASE WHEN published_date IS NULL THEN 1 END) as missing_dates,
         COUNT(CASE WHEN short_description IS NULL OR short_description = '' THEN 1 END) as missing_descriptions,
         COUNT(CASE WHEN author_name IS NULL OR author_name = '' THEN 1 END) as missing_author_names,
         COUNT(CASE WHEN category_name IS NULL OR category_name = '' THEN 1 END) as missing_category_names
@@ -364,25 +363,26 @@ async function checkDatabaseHealth() {
     console.log(`  • Tags table: ${storage.tags_size}`);
     console.log(`  • Total database: ${storage.total_size}`);
 
-    // Index usage statistics
+    // Index usage statistics (fixed: use relname/indexrelname)
     console.log('\n📈 Index Usage:');
     const indexResult = await db.execute(sql`
       SELECT 
         schemaname, 
-        tablename, 
-        indexname, 
+        relname AS tablename, 
+        indexrelname AS indexname, 
         idx_tup_read, 
         idx_tup_fetch
       FROM pg_stat_user_indexes 
       WHERE schemaname = 'public'
-        AND tablename IN ('articles', 'series', 'authors', 'categories', 'tags')
+        AND relname IN ('articles', 'series', 'authors', 'categories', 'tags')
       ORDER BY idx_tup_read DESC 
       LIMIT 10
     `);
 
     if (indexResult.rows.length > 0) {
       indexResult.rows.forEach((idx: any) => {
-        console.log(`  • ${idx.tablename}.${idx.indexname}: ${idx.idx_tup_read} reads`);
+        const reads = Number(idx.idx_tup_read || 0);
+        console.log(`  • ${idx.tablename}.${idx.indexname}: ${reads} tuple reads`);
       });
     } else {
       console.log('  • No index usage statistics available');
@@ -391,7 +391,7 @@ async function checkDatabaseHealth() {
     // Overall health status
     const healthScore = calculateHealthScore({
       responseTime,
-      orphanCount: parseInt(orphanCount) + parseInt(orphanSeriesCount),
+      orphanCount: parseInt(orphanCount),
       duplicateCount: totalDuplicateSlugs + crossSlugs,
       totalContent: articleCount.count + seriesCount.count,
       featuredUnpublishedCount: totalFeaturedUnpublished,

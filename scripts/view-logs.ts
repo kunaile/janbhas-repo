@@ -1,6 +1,6 @@
 // scripts/view-logs.ts
 
-import { createDbConnection, getDb } from '../src/db';
+import { createDbConnection, getDb, closeDbConnection } from '../src/db';
 import { sql } from 'drizzle-orm';
 
 const log = {
@@ -22,9 +22,11 @@ function parseArgs(): {
   contentType?: string;
 } {
   const args = process.argv.slice(2);
+  const limitRaw = args.find(arg => arg.startsWith('--limit='))?.split('=')[1];
+  const limitParsed = Number.parseInt(limitRaw || '', 10);
   return {
     recent: args.includes('--recent'),
-    limit: parseInt(args.find(arg => arg.startsWith('--limit='))?.split('=')[1] || '20'),
+    limit: Number.isFinite(limitParsed) && limitParsed > 0 ? limitParsed : 20,
     help: args.includes('--help'),
     editor: args.find(arg => arg.startsWith('--editor='))?.split('=')[1],
     featured: args.includes('--featured'),
@@ -70,23 +72,29 @@ Content Types Tracked:
   `);
 }
 
+function escapeLiteral(input: string): string {
+  return input.replace(/'/g, "''");
+}
+
 async function viewLogs() {
+  let shouldClose = false;
   try {
     const options = parseArgs();
 
     if (options.help) {
       showHelp();
-      process.exit(0);
+      return;
     }
 
     log.info('Fetching enhanced content activity logs with series support...');
 
     await createDbConnection();
+    shouldClose = true;
     const db = getDb();
 
     console.log('\n=== ENHANCED CONTENT ACTIVITY LOGS ===\n');
 
-    // Build filter conditions
+    // Build filter descriptor for display
     let filterDesc = '';
     const filters: string[] = [];
 
@@ -103,7 +111,12 @@ async function viewLogs() {
       filterDesc = ` (${filters.join(', ')})`;
     }
 
-   // Combined query for both articles and series
+    // Sanitize dynamic values used in raw SQL
+    const contentTypeCond = options.contentType ? escapeLiteral(options.contentType) : '';
+    const editorCond = options.editor ? escapeLiteral(options.editor) : '';
+
+    // Combined query for both articles and series
+    // Duration removed from schema: select NULL for duration and omit from output
     const combinedQuery = `
       WITH combined_content AS (
         -- Articles (including episodes)
@@ -115,7 +128,7 @@ async function viewLogs() {
           a.is_published,
           a.is_featured,
           a.word_count,
-          a.duration,
+          NULL::integer as duration,
           a.created_at,
           a.updated_at,
           a.article_type,
@@ -178,15 +191,15 @@ async function viewLogs() {
       ${options.featured ? 'AND is_featured = true' : ''}
       ${options.published ? 'AND is_published = true' : ''}
       ${options.completed ? 'AND is_complete = true' : ''}
-      ${options.contentType ? `AND article_type = '${options.contentType}'` : ''}
-      ${options.editor ? `AND (editor_name ILIKE '%${options.editor}%' OR editor_github ILIKE '%${options.editor}%')` : ''}
+      ${options.contentType ? `AND (content_type = 'series' OR article_type = '${contentTypeCond}')` : ''}
+      ${options.editor ? `AND (editor_name ILIKE '%${editorCond}%' OR editor_github ILIKE '%${editorCond}%')` : ''}
       ${options.episodes && !options.series ? 'AND series_id IS NOT NULL' : ''}
       ORDER BY updated_at DESC
       LIMIT ${options.limit}
     `;
 
     const activitiesResult = await db.execute(sql.raw(combinedQuery));
-    const activities = activitiesResult.rows;
+    const activities = activitiesResult.rows as any[];
 
     if (activities.length === 0) {
       console.log('No activities found matching the criteria.');
@@ -248,13 +261,8 @@ async function viewLogs() {
       statusParts.push(activity.is_published ? 'Published' : 'Draft');
       if (activity.is_featured) statusParts.push('Featured');
 
-      // Word count and duration
+      // Word count only (duration removed)
       if (activity.word_count) statusParts.push(`${activity.word_count} words`);
-      if (activity.duration) {
-        const minutes = Math.floor(activity.duration / 60);
-        const seconds = activity.duration % 60;
-        statusParts.push(`${minutes}:${seconds.toString().padStart(2, '0')}`);
-      }
 
       console.log(`    Status: ${statusParts.join(' • ')}`);
       console.log(`    Slug: ${activity.slug}`);
@@ -276,7 +284,6 @@ async function viewLogs() {
 
     // Calculate totals
     const totalWords = activities.reduce((sum: number, a: any) => sum + (a.word_count || 0), 0);
-    const totalDuration = activities.reduce((sum: number, a: any) => sum + (a.duration || 0), 0);
     const avgWords = totalWords > 0 ? Math.round(totalWords / activities.length) : 0;
 
     console.log('='.repeat(60));
@@ -312,12 +319,6 @@ async function viewLogs() {
       console.log(`  • Average words: ${avgWords}`);
     }
 
-    if (totalDuration > 0) {
-      const hours = Math.floor(totalDuration / 3600);
-      const minutes = Math.floor((totalDuration % 3600) / 60);
-      console.log(`  • Total duration: ${hours}h ${minutes}m`);
-    }
-
     // Editor breakdown
     const editorCounts = new Map<string, { total: number, series: number, episodes: number, articles: number }>();
     activities.forEach((a: any) => {
@@ -351,10 +352,16 @@ async function viewLogs() {
     }
 
     log.success('Enhanced activity logs with series support retrieved successfully');
-
   } catch (error) {
     log.error(`Failed to retrieve logs: ${error}`);
-    process.exit(1);
+    // Set exit code; allow finally to run for graceful close
+    process.exitCode = 1;
+  } finally {
+    try {
+      await closeDbConnection();
+    } catch {
+      // ignore close errors
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 // scripts/content-stats.ts
 
+
 import { createDbConnection, getDb } from '../src/db';
 import { articles, authors, categories, editors, languages, subCategories, tags, articleTags, series } from '../src/db/schema';
 import { sql, count, isNull, desc, eq } from 'drizzle-orm';
@@ -28,14 +29,14 @@ async function generateContentStats() {
     const [tagCount] = await db.select({ count: count() }).from(tags).where(isNull(tags.deletedAt));
     const [editorCount] = await db.select({ count: count() }).from(editors).where(isNull(editors.deletedAt));
     const [articleCount] = await db.select({ count: count() }).from(articles).where(isNull(articles.deletedAt));
-    const [seriesCount] = await db.select({ count: count() }).from(series).where(isNull(series.deletedAt)); // NEW
+    const [seriesCount] = await db.select({ count: count() }).from(series).where(isNull(series.deletedAt));
     const [publishedCount] = await db.select({ count: count() }).from(articles)
       .where(sql`deleted_at IS NULL AND is_published = true`);
     const [featuredCount] = await db.select({ count: count() }).from(articles)
       .where(sql`deleted_at IS NULL AND is_featured = true`);
-    const [publishedSeriesCount] = await db.select({ count: count() }).from(series) // NEW
+    const [publishedSeriesCount] = await db.select({ count: count() }).from(series)
       .where(sql`deleted_at IS NULL AND is_published = true`);
-    const [completedSeriesCount] = await db.select({ count: count() }).from(series) // NEW
+    const [completedSeriesCount] = await db.select({ count: count() }).from(series)
       .where(sql`deleted_at IS NULL AND is_complete = true`);
 
     console.log(`  • Languages: ${languageCount.count}`);
@@ -48,7 +49,6 @@ async function generateContentStats() {
     console.log(`  • Published Articles: ${publishedCount.count}`);
     console.log(`  • Featured Articles: ${featuredCount.count}`);
     console.log(`  • Draft Articles: ${articleCount.count - publishedCount.count}`);
-    // Series statistics
     console.log(`  • Total Series: ${seriesCount.count}`);
     console.log(`  • Published Series: ${publishedSeriesCount.count}`);
     console.log(`  • Completed Series: ${completedSeriesCount.count}`);
@@ -65,7 +65,6 @@ async function generateContentStats() {
       GROUP BY article_type 
       ORDER BY count DESC
     `);
-
     contentTypeStats.rows.forEach((row: any) => {
       console.log(`  • ${row.article_type}: ${row.count} total (${row.published_count} published)`);
     });
@@ -82,6 +81,7 @@ async function generateContentStats() {
     // Language breakdown
     console.log('\n🌍 Content by Language:');
     const languageStats = await db.select({
+      id: languages.id,
       name: languages.name,
       code: languages.code,
       articleCount: count(articles.id),
@@ -92,7 +92,7 @@ async function generateContentStats() {
       .groupBy(languages.id, languages.name, languages.code)
       .orderBy(desc(count(articles.id)));
 
-    // Get series count per language
+    // Get series count per language (use id to map reliably)
     const seriesLanguageStats = await db.select({
       languageId: series.languageId,
       seriesCount: count(series.id)
@@ -104,45 +104,104 @@ async function generateContentStats() {
     const seriesCountMap = new Map(seriesLanguageStats.map(s => [s.languageId, s.seriesCount]));
 
     languageStats.forEach(lang => {
-      const seriesCount = seriesCountMap.get(lang.code) || 0;
-      console.log(`  • ${lang.name} (${lang.code}): ${lang.articleCount} articles, ${seriesCount} series`);
+      const seriesCountForLang = seriesCountMap.get(lang.id) || 0;
+      console.log(`  • ${lang.name} (${lang.code}): ${lang.articleCount} articles, ${seriesCountForLang} series`);
     });
 
-    // Top authors
-    console.log('\n✍️ Top Authors (by total content):');
-    const topAuthors = await db.execute(sql`
-      SELECT 
-        a.name,
-        COALESCE(at.local_name, a.name) as display_name,
-        COALESCE(article_counts.article_count, 0) as article_count,
-        COALESCE(series_counts.series_count, 0) as series_count,
-        COALESCE(article_counts.article_count, 0) + COALESCE(series_counts.series_count, 0) as total_content
-      FROM authors a
-      LEFT JOIN author_translations at ON a.id = at.author_id AND at.language_id = (
-        SELECT id FROM languages WHERE code = 'hi' LIMIT 1
-      )
-      LEFT JOIN (
-        SELECT author_id, COUNT(*) as article_count 
-        FROM articles 
-        WHERE deleted_at IS NULL 
-        GROUP BY author_id
-      ) article_counts ON a.id = article_counts.author_id
-      LEFT JOIN (
-        SELECT author_id, COUNT(*) as series_count 
-        FROM series 
-        WHERE deleted_at IS NULL 
-        GROUP BY author_id
-      ) series_counts ON a.id = series_counts.author_id
-      WHERE a.deleted_at IS NULL
-      ORDER BY total_content DESC
-      LIMIT 10
+    // Helpers for dynamic per-language display
+    type LangCounts = { articles: number; series: number };
+    const toLine = (name: string, totalArticles: number, perLang: Map<string, LangCounts>) => {
+      const parts: string[] = [];
+      for (const [code, c] of perLang) {
+        if ((c.articles || 0) > 0 || (c.series || 0) > 0) {
+          const seg = (c.series || 0) > 0
+            ? `${code.toUpperCase()} : ${c.articles} articles, ${c.series} series`
+            : `${code.toUpperCase()} : ${c.articles} articles`;
+          parts.push(seg);
+        }
+      }
+      return parts.length > 0
+        ? `${name} - ${totalArticles} Articles, [ ${parts.join(' | ')} ]`
+        : `${name} - ${totalArticles} Articles`;
+    };
+
+    // Preload language codes
+    const langRows = await db.select({ id: languages.id, code: languages.code }).from(languages).where(isNull(languages.deletedAt));
+    const codeByLangId = new Map(langRows.map(r => [r.id, r.code]));
+
+    // ========== Authors: English name + dynamic per-language counts ==========
+    console.log('\n✍️ Authors (by content, dynamic per-language):');
+
+    const authorRows = await db.select({ id: authors.id, name: authors.name })
+      .from(authors).where(isNull(authors.deletedAt));
+
+    const authorArt = await db.execute(sql`
+      SELECT author_id, language_id, COUNT(*)::int AS articles
+      FROM articles
+      WHERE deleted_at IS NULL AND author_id IS NOT NULL
+      GROUP BY author_id, language_id
     `);
 
-    topAuthors.rows.forEach((author: any, index: number) => {
-      console.log(`  ${index + 1}. ${author.display_name}: ${author.total_content} total (${author.article_count} articles, ${author.series_count} series)`);
-    });
+    const authorSer = await db.execute(sql`
+      SELECT author_id, language_id, COUNT(*)::int AS series
+      FROM series
+      WHERE deleted_at IS NULL AND author_id IS NOT NULL
+      GROUP BY author_id, language_id
+    `);
 
-    // Series statistics
+    type AuthorStat = {
+      id: string;
+      name: string;
+      totalArticles: number;
+      totalSeries: number;
+      perLang: Map<string, LangCounts>;
+    };
+
+    const authorStats = new Map<string, AuthorStat>();
+    for (const a of authorRows) {
+      authorStats.set(a.id, {
+        id: a.id,
+        name: a.name,
+        totalArticles: 0,
+        totalSeries: 0,
+        perLang: new Map()
+      });
+    }
+
+    for (const r of authorArt.rows as any[]) {
+      const s = authorStats.get(r.author_id);
+      const code = codeByLangId.get(r.language_id);
+      if (!s || !code) continue;
+      const prev = s.perLang.get(code) || { articles: 0, series: 0 };
+      prev.articles += Number(r.articles || 0);
+      s.perLang.set(code, prev);
+      s.totalArticles += Number(r.articles || 0);
+    }
+
+    for (const r of authorSer.rows as any[]) {
+      const s = authorStats.get(r.author_id);
+      const code = codeByLangId.get(r.language_id);
+      if (!s || !code) continue;
+      const prev = s.perLang.get(code) || { articles: 0, series: 0 };
+      prev.series += Number(r.series || 0);
+      s.perLang.set(code, prev);
+      s.totalSeries += Number(r.series || 0);
+    }
+
+    const authorOut = [...authorStats.values()]
+      .filter(s => s.totalArticles > 0 || s.totalSeries > 0)
+      .sort((a, b) => (b.totalArticles + b.totalSeries) - (a.totalArticles + a.totalSeries))
+      .slice(0, 10);
+
+    if (authorOut.length > 0) {
+      authorOut.forEach((s, idx) => {
+        console.log(`  ${idx + 1}. ${toLine(s.name, s.totalArticles, s.perLang)}`);
+      });
+    } else {
+      console.log('  • No authors with content');
+    }
+
+    // ========== Series analytics (unchanged, shows top by episode count) ==========
     console.log('\n📗 Series Analytics:');
     const seriesStats = await db.execute(sql`
       SELECT 
@@ -152,125 +211,163 @@ async function generateContentStats() {
         s.is_complete,
         s.is_published,
         a.name as author_name,
-        COALESCE(at.local_name, a.name) as author_display_name,
         COUNT(episodes.id) as actual_episodes
       FROM series s
       LEFT JOIN authors a ON s.author_id = a.id
-      LEFT JOIN author_translations at ON a.id = at.author_id AND at.language_id = (
-        SELECT id FROM languages WHERE code = 'hi' LIMIT 1
-      )
       LEFT JOIN articles episodes ON s.id = episodes.series_id AND episodes.deleted_at IS NULL
       WHERE s.deleted_at IS NULL
-      GROUP BY s.id, s.title, s.local_title, s.total_episodes, s.is_complete, s.is_published, a.name, at.local_name
+      GROUP BY s.id, s.title, s.local_title, s.total_episodes, s.is_complete, s.is_published, a.name
       ORDER BY actual_episodes DESC
       LIMIT 10
     `);
-
     if (seriesStats.rows.length > 0) {
       console.log('Top Series by Episode Count:');
-      seriesStats.rows.forEach((series: any, index: number) => {
-        const title = series.local_title || series.title;
-        const author = series.author_display_name;
-        const status = series.is_complete ? '✅' : (series.is_published ? '🟡' : '⚪');
-        console.log(`  ${index + 1}. ${status} ${title} by ${author}: ${series.actual_episodes}/${series.total_episodes} episodes`);
+      seriesStats.rows.forEach((sr: any, index: number) => {
+        const title = sr.local_title || sr.title;
+        const author = sr.author_name || 'Unknown';
+        const status = sr.is_complete ? '✅' : (sr.is_published ? '🟡' : '⚪');
+        console.log(`  ${index + 1}. ${status} ${title} by ${author}: ${sr.actual_episodes}/${sr.total_episodes || 0} episodes`);
       });
     } else {
       console.log('  • No series found');
     }
 
-    // Content by category
-    console.log('\n📝 Content by Category:');
-    const categoryStats = await db.execute(sql`
-      SELECT 
-        c.name,
-        COALESCE(ct.local_name, c.name) as display_name,
-        COALESCE(article_counts.article_count, 0) as article_count,
-        COALESCE(series_counts.series_count, 0) as series_count,
-        COALESCE(article_counts.article_count, 0) + COALESCE(series_counts.series_count, 0) as total_content
-      FROM categories c
-      LEFT JOIN category_translations ct ON c.id = ct.category_id AND ct.language_id = (
-        SELECT id FROM languages WHERE code = 'hi' LIMIT 1
-      )
-      LEFT JOIN (
-        SELECT category_id, COUNT(*) as article_count 
-        FROM articles 
-        WHERE deleted_at IS NULL 
-        GROUP BY category_id
-      ) article_counts ON c.id = article_counts.category_id
-      LEFT JOIN (
-        SELECT category_id, COUNT(*) as series_count 
-        FROM series 
-        WHERE deleted_at IS NULL 
-        GROUP BY category_id
-      ) series_counts ON c.id = series_counts.category_id
-      WHERE c.deleted_at IS NULL
-      ORDER BY total_content DESC
+    // ========== Categories: English name + dynamic per-language counts ==========
+    console.log('\n📝 Categories (dynamic per-language):');
+
+    const categoryRows = await db.select({ id: categories.id, name: categories.name })
+      .from(categories).where(isNull(categories.deletedAt));
+
+    const catArt = await db.execute(sql`
+      SELECT category_id, language_id, COUNT(*)::int AS articles
+      FROM articles
+      WHERE deleted_at IS NULL AND category_id IS NOT NULL
+      GROUP BY category_id, language_id
     `);
 
-    categoryStats.rows.forEach((category: any) => {
-      console.log(`  • ${category.display_name}: ${category.total_content} total (${category.article_count} articles, ${category.series_count} series)`);
-    });
-
-    // Sub-categories breakdown
-    console.log('\n📂 Content by Sub-Category:');
-    const subCategoryStats = await db.execute(sql`
-      SELECT 
-        sc.name,
-        COALESCE(sct.local_name, sc.name) as display_name,
-        c.name as category_name,
-        COALESCE(ct.local_name, c.name) as category_display_name,
-        COUNT(a.id) as article_count
-      FROM sub_categories sc
-      LEFT JOIN sub_category_translations sct ON sc.id = sct.sub_category_id AND sct.language_id = (
-        SELECT id FROM languages WHERE code = 'hi' LIMIT 1
-      )
-      LEFT JOIN categories c ON sc.category_id = c.id
-      LEFT JOIN category_translations ct ON c.id = ct.category_id AND ct.language_id = (
-        SELECT id FROM languages WHERE code = 'hi' LIMIT 1
-      )
-      LEFT JOIN articles a ON sc.id = a.sub_category_id AND a.deleted_at IS NULL
-      WHERE sc.deleted_at IS NULL
-      GROUP BY sc.id, sc.name, sct.local_name, c.name, ct.local_name
-      ORDER BY article_count DESC
+    const catSer = await db.execute(sql`
+      SELECT category_id, language_id, COUNT(*)::int AS series
+      FROM series
+      WHERE deleted_at IS NULL AND category_id IS NOT NULL
+      GROUP BY category_id, language_id
     `);
 
-    if (subCategoryStats.rows.length > 0) {
-      subCategoryStats.rows.forEach((subCat: any) => {
-        console.log(`  • ${subCat.display_name} (${subCat.category_display_name}): ${subCat.article_count} articles`);
+    type CatStat = {
+      id: string;
+      name: string;
+      totalArticles: number;
+      totalSeries: number;
+      perLang: Map<string, LangCounts>;
+    };
+
+    const catStats = new Map<string, CatStat>();
+    for (const c of categoryRows) {
+      catStats.set(c.id, {
+        id: c.id,
+        name: c.name,
+        totalArticles: 0,
+        totalSeries: 0,
+        perLang: new Map()
       });
-    } else {
-      console.log('  • No sub-categories found');
     }
 
-    // Top tags
-    console.log('\n🏷️ Top Tags (by usage):');
-    const tagStats = await db.execute(sql`
-      SELECT 
-        t.name,
-        COALESCE(tt.local_name, t.name) as display_name,
-        COUNT(at.id) as usage_count
+    for (const r of catArt.rows as any[]) {
+      const s = catStats.get(r.category_id);
+      const code = codeByLangId.get(r.language_id);
+      if (!s || !code) continue;
+      const prev = s.perLang.get(code) || { articles: 0, series: 0 };
+      prev.articles += Number(r.articles || 0);
+      s.perLang.set(code, prev);
+      s.totalArticles += Number(r.articles || 0);
+    }
+
+    for (const r of catSer.rows as any[]) {
+      const s = catStats.get(r.category_id);
+      const code = codeByLangId.get(r.language_id);
+      if (!s || !code) continue;
+      const prev = s.perLang.get(code) || { articles: 0, series: 0 };
+      prev.series += Number(r.series || 0);
+      s.perLang.set(code, prev);
+      s.totalSeries += Number(r.series || 0);
+    }
+
+    const catOut = [...catStats.values()]
+      .filter(s => s.totalArticles > 0 || s.totalSeries > 0)
+      .sort((a, b) => (b.totalArticles + b.totalSeries) - (a.totalArticles + a.totalSeries));
+
+    if (catOut.length > 0) {
+      catOut.forEach(s => {
+        console.log(`  • ${toLine(s.name, s.totalArticles, s.perLang)}`);
+      });
+    } else {
+      console.log('  • No categories with content');
+    }
+
+    // ========== Tags: English name + dynamic per-language usage (articles only) ==========
+    console.log('\n🏷️ Tags (dynamic per-language usage):');
+
+    const tagRows = await db.select({ id: tags.id, name: tags.name })
+      .from(tags).where(isNull(tags.deletedAt));
+
+    const tagUsage = await db.execute(sql`
+      SELECT t.id as tag_id, a.language_id, COUNT(at.id)::int AS articles
       FROM tags t
-      LEFT JOIN tag_translations tt ON t.id = tt.tag_id AND tt.language_id = (
-        SELECT id FROM languages WHERE code = 'hi' LIMIT 1
-      )
       LEFT JOIN article_tags at ON t.id = at.tag_id
+      LEFT JOIN articles a ON a.id = at.article_id AND a.deleted_at IS NULL
       WHERE t.deleted_at IS NULL
-      GROUP BY t.id, t.name, tt.local_name
-      ORDER BY usage_count DESC
-      LIMIT 10
+      GROUP BY t.id, a.language_id
     `);
 
-    if (tagStats.rows.length > 0) {
-      tagStats.rows.forEach((tag: any, index: number) => {
-        const displayName = tag.local_name && tag.local_name !== tag.name ?
-          `${tag.local_name} (${tag.name})` : tag.name;
-        console.log(`  ${index + 1}. ${displayName}: ${tag.usage_count} articles`);
+    type TagStat = {
+      id: string;
+      name: string;
+      totalArticles: number;
+      perLang: Map<string, { articles: number }>;
+    };
+
+    const tagStatsMap = new Map<string, TagStat>();
+    for (const t of tagRows) {
+      tagStatsMap.set(t.id, {
+        id: t.id,
+        name: t.name,
+        totalArticles: 0,
+        perLang: new Map()
       });
-    } else {
-      console.log('  • No tags found');
     }
 
-    // Editor activity
+    for (const r of tagUsage.rows as any[]) {
+      const s = tagStatsMap.get(r.tag_id);
+      const code = codeByLangId.get(r.language_id);
+      if (!s || !code) continue;
+      const prev = s.perLang.get(code) || { articles: 0 };
+      prev.articles += Number(r.articles || 0);
+      s.perLang.set(code, prev);
+      s.totalArticles += Number(r.articles || 0);
+    }
+
+    const tagOut = [...tagStatsMap.values()]
+      .filter(s => s.totalArticles > 0)
+      .sort((a, b) => b.totalArticles - a.totalArticles)
+      .slice(0, 10);
+
+    if (tagOut.length > 0) {
+      tagOut.forEach((s, idx) => {
+        const parts: string[] = [];
+        for (const [code, c] of s.perLang) {
+          if ((c.articles || 0) > 0) {
+            parts.push(`${code.toUpperCase()} : ${c.articles} articles`);
+          }
+        }
+        const line = parts.length > 0
+          ? `${s.name} - ${s.totalArticles} Articles, [ ${parts.join(' | ')} ]`
+          : `${s.name} - ${s.totalArticles} Articles`;
+        console.log(`  ${idx + 1}. ${line}`);
+      });
+    } else {
+      console.log('  • No tags with usage');
+    }
+
+    // Editor activity (unchanged)
     console.log('\n👥 Editor Activity:');
     const editorStats = await db.execute(sql`
       SELECT 
@@ -296,7 +393,6 @@ async function generateContentStats() {
       WHERE e.deleted_at IS NULL
       ORDER BY total_content DESC
     `);
-
     editorStats.rows.forEach((editor: any) => {
       let displayName = editor.name;
       if (editor.github_user_name) displayName += ` (@${editor.github_user_name})`;
@@ -304,7 +400,7 @@ async function generateContentStats() {
       console.log(`  • ${displayName}: ${editor.total_content} total (${editor.article_count} articles, ${editor.series_count} series)`);
     });
 
-    // Word count statistics
+    // Word count statistics (unchanged)
     console.log('\n📊 Content Metrics:');
     const wordStatsResult = await db.execute(sql`
       SELECT 
@@ -318,7 +414,6 @@ async function generateContentStats() {
       AND word_count IS NOT NULL 
       AND word_count > 0
     `);
-
     const stats = wordStatsResult.rows[0] as any;
     console.log(`  • Articles with word count: ${stats?.articles_with_word_count || 0}`);
     console.log(`  • Average words per article: ${stats?.avg_words || 0}`);
@@ -326,7 +421,7 @@ async function generateContentStats() {
     console.log(`  • Longest article: ${stats?.max_words || 0} words`);
     console.log(`  • Total word count: ${stats?.total_words || 0} words`);
 
-    // Series word count statistics
+    // Series word count statistics (unchanged)
     const seriesWordStats = await db.execute(sql`
       SELECT 
         COUNT(*) as series_with_word_count,
@@ -339,7 +434,6 @@ async function generateContentStats() {
       AND total_word_count IS NOT NULL 
       AND total_word_count > 0
     `);
-
     const seriesStats_words = seriesWordStats.rows[0] as any;
     if (seriesStats_words?.series_with_word_count > 0) {
       console.log(`  • Series with word count: ${seriesStats_words.series_with_word_count}`);
@@ -349,30 +443,7 @@ async function generateContentStats() {
       console.log(`  • Total series words: ${seriesStats_words.total_series_words || 0} words`);
     }
 
-    // Duration statistics
-    const durationStatsResult = await db.execute(sql`
-      SELECT 
-        COUNT(*) as articles_with_duration,
-        AVG(duration)::int as avg_duration,
-        MIN(duration) as min_duration,
-        MAX(duration) as max_duration,
-        SUM(duration) as total_duration
-      FROM articles 
-      WHERE deleted_at IS NULL 
-      AND duration IS NOT NULL 
-      AND duration > 0
-    `);
-
-    const durationStats = durationStatsResult.rows[0] as any;
-    if (durationStats?.articles_with_duration > 0) {
-      console.log(`  • Articles with duration: ${durationStats.articles_with_duration}`);
-      console.log(`  • Average duration: ${Math.floor((durationStats.avg_duration || 0) / 60)}:${String((durationStats.avg_duration || 0) % 60).padStart(2, '0')}`);
-      console.log(`  • Shortest duration: ${Math.floor((durationStats.min_duration || 0) / 60)}:${String((durationStats.min_duration || 0) % 60).padStart(2, '0')}`);
-      console.log(`  • Longest duration: ${Math.floor((durationStats.max_duration || 0) / 60)}:${String((durationStats.max_duration || 0) % 60).padStart(2, '0')}`);
-      console.log(`  • Total duration: ${Math.floor((durationStats.total_duration || 0) / 3600)}h ${Math.floor(((durationStats.total_duration || 0) % 3600) / 60)}m`);
-    }
-
-    // Recent activity
+    // Recent activity (unchanged)
     console.log('\n⏰ Recent Activity (Last 30 days):');
     const recentActivityResult = await db.execute(sql`
       SELECT 
@@ -382,7 +453,6 @@ async function generateContentStats() {
         (SELECT COUNT(*) FROM series WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '30 days') as recent_series,
         (SELECT COUNT(*) FROM series WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '30 days' AND is_published) as recent_series_published
     `);
-
     const recent = recentActivityResult.rows[0] as any;
     console.log(`  • Articles created: ${recent?.recent_articles || 0}`);
     console.log(`  • Articles published: ${recent?.recent_published || 0}`);
@@ -390,7 +460,7 @@ async function generateContentStats() {
     console.log(`  • Series created: ${recent?.recent_series || 0}`);
     console.log(`  • Series published: ${recent?.recent_series_published || 0}`);
 
-    // Content health indicators
+    // Content health indicators (unchanged)
     console.log('\n🏥 Content Health:');
     const healthResult = await db.execute(sql`
       SELECT 
@@ -403,8 +473,6 @@ async function generateContentStats() {
       FROM articles 
       WHERE deleted_at IS NULL
     `);
-
-    // Series health indicators
     const seriesHealthResult = await db.execute(sql`
       SELECT 
         COUNT(CASE WHEN thumbnail_url IS NOT NULL THEN 1 END) as with_thumbnails,
@@ -414,7 +482,6 @@ async function generateContentStats() {
       FROM series 
       WHERE deleted_at IS NULL
     `);
-
     const health = healthResult.rows[0] as any;
     const seriesHealth = seriesHealthResult.rows[0] as any;
     const totalArticles = health?.total_articles || 1;

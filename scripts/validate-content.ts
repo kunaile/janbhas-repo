@@ -1,20 +1,26 @@
 // scripts/validate-content.ts
 
+
 import { join } from 'path';
 import { findMarkdownFiles, parseMarkdownFile, log } from '../src/services/contentProcessor';
 import { isValidLanguageCode } from '../src/services/contentProcessor/utils';
 import type { ParsedFile } from '../src/services/contentProcessor/types';
+import { getDb } from '../src/db';
+import { authors, categories, subCategories, tags } from '../src/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
 
 function parseArgs(): {
   verbose: boolean;
   help: boolean;
   mapping: boolean;
+  strict: boolean;
 } {
   const args = process.argv.slice(2);
   return {
     verbose: args.includes('--verbose'),
     help: args.includes('--help'),
-    mapping: args.includes('--mapping')
+    mapping: args.includes('--mapping'),
+    strict: args.includes('--strict'),
   };
 }
 
@@ -27,12 +33,14 @@ Content Validation Tool - Usage (Enhanced for Series & Mapping):
 Options:
   --verbose          Show detailed validation results
   --mapping          Validate mapping files availability
+  --strict           Fail if referenced authors/categories/tags/sub-cats are missing
   --help             Show this help message
 
 Examples:
-  pnpm validate                    # Validate all content
-  pnpm validate --verbose          # Show detailed validation info
-  pnpm validate --mapping          # Include mapping validation
+  pnpm validate                      # Validate all content
+  pnpm validate --verbose            # Show detailed validation info
+  pnpm validate --mapping            # Include mapping validation
+  pnpm validate --strict             # Enforce preexisting refs (articles-only sync readiness)
 
 Validates:
   📗 Series covers (base_type: "series")
@@ -98,6 +106,9 @@ async function validateContent() {
       baseType_vs_base_type: { snake_case: 0, camelCase: 0 }
     };
 
+    // DB for strict preflight (lazy: only if --strict)
+    const db = options.strict ? getDb() : null;
+
     // Validation results
     const results: Array<{
       file: string;
@@ -124,7 +135,6 @@ async function validateContent() {
         // Use normalized frontmatter from parsed file
         const frontmatter = parsed.frontmatter;
 
-        // Get original frontmatter for field usage tracking
         // Read the original file to track raw field usage patterns
         try {
           const fs = require('fs');
@@ -175,7 +185,6 @@ async function validateContent() {
 
         // Series-specific validation (using normalized frontmatter)
         if (isSeriesCover) {
-          // Series cover page validations
           if (frontmatter.series_title) {
             fileIssues.push('Series covers should not have "series_title" property');
           }
@@ -185,9 +194,7 @@ async function validateContent() {
           if (frontmatter.article_type) {
             fileIssues.push('Series covers should not have "article_type" property');
           }
-          // 'completed' property is allowed for series
         } else if (isEpisode) {
-          // Episode validations
           if (!frontmatter.series_title) {
             fileIssues.push('Episodes must have "series_title" property referencing series English title');
           }
@@ -220,6 +227,11 @@ async function validateContent() {
 
         // URL validation for media fields (using normalized frontmatter)
         validateUrls(frontmatter, fileIssues);
+
+        // Strict preflight: ensure refs exist (no creation here)
+        if (options.strict && db) {
+          await checkRefsExist(db, frontmatter, fileIssues);
+        }
 
         // Determine status
         const hasErrors = fileIssues.some(issue => isErrorLevel(issue));
@@ -283,6 +295,7 @@ async function validateContent() {
     process.exit(1);
   }
 }
+
 
 // Helper functions
 function trackFieldUsage(originalFrontmatter: any, fieldUsage: any) {
@@ -376,10 +389,56 @@ function isErrorLevel(issue: string): boolean {
     'Invalid date',
     'should not have',
     'must have',
-    'Episodes referencing missing series'
+    'Episodes referencing missing series',
+    'Missing reference', // strict mode additions
   ];
 
   return errorKeywords.some(keyword => new RegExp(keyword).test(issue));
+}
+
+// Strict preflight: ensure references exist
+async function checkRefsExist(db: ReturnType<typeof getDb>, frontmatter: any, issues: string[]) {
+  // Author
+  if (frontmatter.author) {
+    const author = await db.select({ id: authors.id }).from(authors)
+      .where(and(eq(authors.name, frontmatter.author), isNull(authors.deletedAt)))
+      .limit(1);
+    if (author.length === 0) {
+      issues.push(`Missing reference: author "${frontmatter.author}"`);
+    }
+  }
+  // Category
+  if (frontmatter.category) {
+    const category = await db.select({ id: categories.id }).from(categories)
+      .where(and(eq(categories.name, frontmatter.category), isNull(categories.deletedAt)))
+      .limit(1);
+    if (category.length === 0) {
+      issues.push(`Missing reference: category "${frontmatter.category}"`);
+    }
+  }
+  // Sub-category
+  if (frontmatter.sub_category) {
+    const sub = await db.select({ id: subCategories.id }).from(subCategories)
+      .where(and(eq(subCategories.name, frontmatter.sub_category), isNull(subCategories.deletedAt)))
+      .limit(1);
+    if (sub.length === 0) {
+      issues.push(`Missing reference: sub_category "${frontmatter.sub_category}"`);
+    }
+  }
+  // Tags (string or array)
+  if (frontmatter.tags) {
+    const tagsToCheck: string[] = Array.isArray(frontmatter.tags)
+      ? frontmatter.tags
+      : String(frontmatter.tags).split(/[,;|]/).map((t: string) => t.trim()).filter(Boolean);
+    for (const t of tagsToCheck) {
+      const tag = await db.select({ id: tags.id }).from(tags)
+        .where(and(eq(tags.name, t), isNull(tags.deletedAt)))
+        .limit(1);
+      if (tag.length === 0) {
+        issues.push(`Missing reference: tag "${t}"`);
+      }
+    }
+  }
 }
 
 async function validateMappingFiles(warnings: string[]) {
