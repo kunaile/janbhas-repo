@@ -7,6 +7,7 @@ import {
   getEditorFromCommit,
   log
 } from '../src/services/contentProcessor';
+import { setRefCreationPolicy } from '../src/services/database';
 
 function getChangedFilesFromEnvironment(): string[] {
   const changedFiles = process.env.CHANGED_FILES?.trim().split('\n').filter(Boolean) || [];
@@ -50,6 +51,9 @@ async function main() {
     await createDbConnection();
     log.success('Database connected');
 
+    // For CI: never create refs from content
+    setRefCreationPolicy('forbid');
+
     // Get changed files from environment
     const changedFiles = getChangedFilesFromEnvironment();
 
@@ -85,7 +89,7 @@ async function main() {
 
     // Content type breakdown
     console.log('\n📚 CONTENT BREAKDOWN:');
-    let contentSummary = [];
+    let contentSummary: string[] = [];
     if (result.seriesProcessed && result.seriesProcessed > 0) {
       console.log(`   📗 Series covers: ${result.seriesProcessed}`);
       contentSummary.push(`${result.seriesProcessed} series`);

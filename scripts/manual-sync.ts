@@ -8,6 +8,7 @@ import {
   getEditorFromEnvironment,
   log
 } from '../src/services/contentProcessor';
+import { setRefCreationPolicy } from '../src/services/database';
 
 async function main() {
   try {
@@ -20,6 +21,9 @@ async function main() {
 
     await createDbConnection();
     log.success('Database connected');
+
+    // For manual syncs: do not create refs from content; fail only offending files
+    setRefCreationPolicy('forbid');
 
     // Get all markdown files
     const contentDir = join(process.cwd(), 'content');

@@ -9,6 +9,8 @@ import {
   getEditorFromEnvironment,
   log
 } from '../src/services/contentProcessor';
+import { setRefCreationPolicy } from '../src/services/database';
+
 
 // Parse command line arguments
 function parseArgs(): {
@@ -18,6 +20,7 @@ function parseArgs(): {
   since?: string;
   dryRun: boolean;
   verbose: boolean;
+  strict: boolean;
   help: boolean;
 } {
   const args = process.argv.slice(2);
@@ -28,6 +31,7 @@ function parseArgs(): {
     since: args.find(arg => arg.startsWith('--since='))?.split('=')[1],
     dryRun: args.includes('--dry-run'),
     verbose: args.includes('--verbose'),
+    strict: args.includes('--strict'),
     help: args.includes('--help')
   };
 }
@@ -45,27 +49,14 @@ Options:
   --since=<commit>   Process files changed since specific commit
   --dry-run          Preview changes without writing to database
   --verbose          Show detailed output including series processing
+  --strict           Forbid creating refs (authors/categories/tags/sub-cats/languages)
   --help             Show this help message
 
 Examples:
-  pnpm sync:local --all --verbose          # Process all content with detailed logs
-  pnpm sync:local --changed --dry-run      # Preview changes to modified files
-  pnpm sync:local --since=HEAD~5          # Process files changed in last 5 commits
-  pnpm sync:local --recent                 # Process files from last commit
-
-Content Types Supported:
-  📗 Series covers (base_type: "series")
-  📖 Episodes (series_title: "Series English Title")
-  📄 Standalone articles
-  🔄 Mapping-based transliteration (no external API)
-  🏷️  Automatic tag processing
-
-Field Name Support:
-  ✅ local_title / localTitle
-  ✅ sub_category / subCategory  
-  ✅ series_title / seriesTitle
-  ✅ article_type / articleType
-  ✅ base_type / baseType
+  pnpm sync:local --all --verbose              # Process all content with detailed logs
+  pnpm sync:local --changed --dry-run          # Preview changes to modified files
+  pnpm sync:local --since=HEAD~5               # Process files changed in last 5 commits
+  pnpm sync:local --recent --strict            # Process last commit, no new refs
   `);
 }
 
@@ -122,6 +113,9 @@ async function main() {
 
     await createDbConnection();
     log.success('Database connected');
+
+    // Strict mode toggle for local runs
+    setRefCreationPolicy(options.strict ? 'forbid' : 'allow');
 
     // Get files to process
     const filesToProcess = getChangedFiles(options);
