@@ -110,6 +110,24 @@ export function getCurrentEditorId(): string {
   return currentEditorId;
 }
 
+
+// -----------------------------------------------------------------------------
+// Reference creation policy (portable, reusable across scripts and services)
+// -----------------------------------------------------------------------------
+export type RefCreationPolicy = 'allow' | 'forbid';
+let refCreationPolicy: RefCreationPolicy = 'allow';
+
+export function setRefCreationPolicy(policy: RefCreationPolicy) {
+  refCreationPolicy = policy;
+}
+
+function ensureRefCreationAllowed(kind: 'author' | 'category' | 'subcategory' | 'tag' | 'language', name: string) {
+  if (refCreationPolicy === 'forbid') {
+    throw new Error(`Reference creation forbidden: missing ${kind} "${name}"`);
+  }
+}
+
+
 /**
  * Finds or creates an editor record by GitHub username or name
  * Returns the editor's UUID for foreign key reference
@@ -289,6 +307,9 @@ export async function findOrCreateAuthor(authorData: AuthorData): Promise<string
     return existingAuthor[0].id;
   }
 
+  // Strict mode: do not create
+  ensureRefCreationAllowed('author', authorData.name);
+
   // Create new author with required audit fields
   const [newAuthor] = await db.insert(authors).values({
     name: authorData.name,
@@ -323,6 +344,9 @@ export async function findOrCreateCategory(categoryData: CategoryData): Promise<
     return existingByName[0].id;
   }
 
+  // Strict mode: do not create
+  ensureRefCreationAllowed('category', categoryData.name);
+
   // Create new category with required audit fields
   const [newCategory] = await db.insert(categories).values({
     name: categoryData.name,
@@ -354,6 +378,9 @@ export async function findOrCreateSubCategory(subCategoryData: SubCategoryData):
   if (existingByName.length > 0) {
     return existingByName[0].id;
   }
+
+  // Strict mode: do not create
+  ensureRefCreationAllowed('subcategory', `${subCategoryData.name} (categoryId=${subCategoryData.categoryId})`);
 
   // Create new sub-category with required audit fields
   const [newSubCategory] = await db.insert(subCategories).values({
@@ -387,6 +414,9 @@ export async function findOrCreateTag(tagData: TagData): Promise<string> {
     return existingByName[0].id;
   }
 
+  // Strict mode: do not create
+  ensureRefCreationAllowed('tag', tagData.name);
+
   // Create new tag with required audit fields
   const [newTag] = await db.insert(tags).values({
     name: tagData.name,
@@ -418,6 +448,9 @@ export async function findOrCreateLanguage(languageData: LanguageData): Promise<
     // Found existing - no creation needed
     return existingLanguage[0].id;
   }
+
+  // Strict mode: do not create
+  ensureRefCreationAllowed('language', languageData.code);
 
   // Create new language with required audit fields
   const [newLanguage] = await db.insert(languages).values({
@@ -578,6 +611,7 @@ export async function computeArticleDenormalizedFields(
       ))
       .limit(1);
 
+    // Handle either camelCase or snake_case in generated typings
     const aLocal = aTr[0] ? ((aTr[0] as any).localName ?? (aTr[0] as any).local_name ?? null) : null;
     authorLocalName = aLocal ?? authorName;
   }
@@ -638,7 +672,7 @@ export async function computeArticleDenormalizedFields(
 
 
 /**
- * Updated upsert article - CLEANED (removed publishedDate and duration)
+ * Updated upsert article - adds publish stamping and events.
  * Populates denormalized names via computeArticleDenormalizedFields (portable, reusable).
  */
 export async function upsertArticle(articleData: ArticleData): Promise<void> {
@@ -671,7 +705,7 @@ export async function upsertArticle(articleData: ArticleData): Promise<void> {
     thumbnailUrl: articleData.thumbnailUrl ?? null,
     audioUrl: articleData.audioUrl ?? null,
     wordCount: articleData.wordCount ?? null,
-    isPublished: articleData.isPublished,
+    isPublished: !!articleData.isPublished,
     isFeatured: articleData.isFeatured || false,
     languageId: articleData.languageId,
     categoryId: articleData.categoryId ?? null,
@@ -697,17 +731,56 @@ export async function upsertArticle(articleData: ArticleData): Promise<void> {
   let articleId: string;
 
   if (existing.length > 0) {
-    // Update existing article
+    const current = existing[0];
+
+    // Detect draft -> published transition
+    const changedToPublished = !current.isPublished && !!articleValues.isPublished;
+
+    const updatePatch: any = {
+      ...articleValues,
+      updatedAt: new Date(),
+    };
+
+    if (changedToPublished) {
+      updatePatch.publishedAt = new Date();
+      updatePatch.publishedBy = editorId;
+
+      // Optional: record publication event
+      await createPublicationEvent({
+        articleId: current.id,
+        eventType: 'published',
+        performedBy: editorId,
+        reason: 'Status changed from draft to published',
+      });
+    }
+
     await db.update(articles)
-      .set({ ...articleValues, updatedAt: new Date() })
-      .where(eq(articles.id, existing[0].id));
-    articleId = existing[0].id;
+      .set(updatePatch)
+      .where(eq(articles.id, current.id));
+
+    articleId = current.id;
   } else {
-    // Insert new article
+    // Insert new article; if coming in published, stamp publish metadata
+    const insertPatch: any = {
+      ...articleValues,
+      publishedAt: articleValues.isPublished ? new Date() : null,
+      publishedBy: articleValues.isPublished ? editorId : null,
+    };
+
     const [newArticle] = await db.insert(articles)
-      .values(articleValues)
+      .values(insertPatch)
       .returning({ id: articles.id });
+
     articleId = newArticle.id;
+
+    if (articleValues.isPublished) {
+      await createPublicationEvent({
+        articleId,
+        eventType: 'published',
+        performedBy: editorId,
+        reason: 'Published on insert',
+      });
+    }
   }
 
   // Process tags if provided
@@ -943,7 +1016,7 @@ export async function getLanguagesWithCounts(): Promise<Array<{
     .from(languages)
     .where(isNull(languages.deletedAt));
 
-  const results = [];
+  const results: Array<{ language: any; articleCount: number }> = [];
   for (const language of languages_list) {
     const count = await db.select()
       .from(articles)
@@ -975,7 +1048,7 @@ export async function getCategoriesWithCounts(): Promise<Array<{
     .from(categories)
     .where(isNull(categories.deletedAt));
 
-  const results = [];
+  const results: Array<{ category: any; articleCount: number }> = [];
   for (const category of categories_list) {
     const count = await db.select()
       .from(articles)
@@ -1007,7 +1080,7 @@ export async function getAuthorsWithCounts(): Promise<Array<{
     .from(authors)
     .where(isNull(authors.deletedAt));
 
-  const results = [];
+  const results: Array<{ author: any; articleCount: number }> = [];
   for (const author of authors_list) {
     const count = await db.select()
       .from(articles)
