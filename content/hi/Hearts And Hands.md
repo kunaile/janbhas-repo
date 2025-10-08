@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1757780241/Hearts-And-Hands_js4oc7.jpg
 words: 962
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 जब ट्रेन डेनवर पहुँची तो उसमें बहुत से यात्री सवार हुए। एक डिब्बे में एक बहुत ही ख़ूबसूरत युवती बैठी थी, उसने शानदार कपड़े पहने थे और वह एक अनुभवी यात्री की तरह आराम से थी। 

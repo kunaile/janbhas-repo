@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/Louisa-May-Alcott---A-Child_s-Biography_lspeoe.jpg
 words: 1144
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 लगभग सत्तर साल पहले, बोस्टन शहर में एक छोटी-सी लड़की रहती थी जिसे भाग जाने की शरारती आदत थी। एक अप्रैल की सुबह, जैसे ही उसकी माँ ने उसके कपड़े के बटन लगाए, लुईसा मे ऐल्कॉट चुपके से घर से निकली और जितनी तेज़ उसके पैर चल सकते थे, उतनी तेज़ी से सड़क पर भाग गई।

@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/The-Terrible-Old-Man_n8a2sw.jpg
 words: 1152
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 एंजेलो रिक्की, जो. सज़ानेक और मैनुएल सिल्वा ने उस भयानक बूढ़े आदमी के घर में चोरी का प्लान बनाया। यह बूढ़ा आदमी वाटर स्ट्रीट पर समंदर के पास एक बहुत पुराने घर में अकेला रहता है, और माना जाता है कि वह बहुत अमीर भी है और बहुत कमज़ोर भी; जो रिक्की और उसके साथियों के चोरी के पेशे के लिए बहुत आकर्षक था।

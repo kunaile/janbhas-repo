@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/A-Wireless-Message_qnoqfe.jpg
 words: 716
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 साल 1896 की गर्मियों में, शिकागो के एक अमीर बिजनेसमैन, विलियम होल्ट, न्यूयॉर्क के एक छोटे से टाउन में रह रहे थे। उनका अपनी पत्नी के साथ "मनमुटाव" चल रहा था, और वे एक साल पहले ही अलग हो गए थे। होल्ट ने इस घटना के बारे में कम से कम एक बंदे को बताया है।

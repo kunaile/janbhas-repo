@@ -7,8 +7,8 @@ category: Short-Story
 thumbnail: https://image-cdn-fa.spotifycdn.com/image/ab67656300005f1f2201d87755c1a756956596dd
 audio: https://open.spotify.com/embed/episode/2YRSVS5zGUuqr1U93F61CH
 words: 1142
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 धीरे-धीरे रात खिसक चली, प्रभात के फूलों के तारे चू पडऩा चाहते थे। विन्ध्य की शैलमाला में गिरि-पथ पर एक झुण्ड बैलों का बोझ लादे आता था। साथ के बंजारे उनके गले की घण्टियों के मधुर स्वर में अपने ग्रामगीतों का आलाप मिला रहे थे। शरद ऋतु की ठण्ड से भरा हुआ पवन उस दीर्घ पथ पर किसी को खोजता हुआ दौड़ रहा था।

@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415720/A-Man-with-Two-Lives_vn4pi8.jpg
 words: 1050
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 यहाँ डेविड विलियम डक की अजीब कहानी है, जो उसने खुद सुनाई है। डक एक बूढ़ा आदमी है जो औरोरा, इलिनोइस में रहता है, और सब उसका सम्मान करते हैं। हालाँकि, उसे लोग आमतौर पर "डेड डक" के नाम से जानते हैं।

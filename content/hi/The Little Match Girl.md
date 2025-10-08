@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/The-Little-Match-Girl_kc2ygi.jpg
 words: 959
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 बाहर बहुत भयानक ठंड थी, बर्फ़ गिर रही थी, और शाम हो चुकी थी— साल की आख़िरी शाम। इस ठंड और अँधेरे में, एक ग़रीब छोटी लड़की नंगे सिर और नंगे पैरों के साथ गली में जा रही थी। जब वह घर से निकली थी, तब उसने चप्पलें पहनी थीं, जो उसकी माँ की थीं। वे बहुत बड़ी थीं, और दो तेज़ भागती हुई गाड़ियों की वजह से उसने गली पार करते हुए उन्हें खो दिया था।

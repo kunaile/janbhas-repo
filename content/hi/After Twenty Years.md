@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415720/After-Twenty-Years_i255th.jpg
 words: 1334
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 थानेदार अपनी गश्त पर तेज़ी से आगे बढ़ रहा था। उसका यह अंदाज़ रोज़ का था, दिखावे के लिए नहीं, क्योंकि देखने वाले कम ही थे। रात के 10 बजे थे, लेकिन ठंडी, तेज़ हवाओं के साथ हल्की बूँदा-बाँदी ने सड़कों को लगभग खाली कर दिया था।

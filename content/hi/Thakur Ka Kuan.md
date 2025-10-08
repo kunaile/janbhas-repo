@@ -7,8 +7,8 @@ category: Short-Story
 thumbnail: https://image-cdn-ak.spotifycdn.com/image/ab67656300005f1fdd65390f39c9c6bd418bcd0a
 audio: https://open.spotify.com/embed/episode/4wSAaB5rIf8ZMES6u3iFkI
 words: 1154
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 जोखू ने लोटा मुँह से लगाया तो पानी में सख्त बदबू आयी । गंगी से बोला- यह कैसा पानी है ? मारे बास के पिया नहीं जाता । गला सूखा जा रहा है और तू सड़ा पानी पिलाये देती है !

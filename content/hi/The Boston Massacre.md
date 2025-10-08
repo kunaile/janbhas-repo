@@ -6,8 +6,8 @@ lang: hi
 category: Short-Story
 thumbnail: https://res.cloudinary.com/dnsh6d8au/image/upload/v1756415721/The-Boston-Massacre_p9jkv9.jpg
 words: 1125
-published: false
-featured: false
+published: true
+featured: true
 ---
 
 यह 3 मार्च, 1770 की शाम थी। पूरे शहर में ब्रिटिश सैनिकों के बैंड की धुन सुनाई दे रही थी। सूरज की आखिरी किरणें टाउन-हाउस पर चमक रही थीं और किंग्स स्ट्रीट में बांसुरी और ढोल की आवाज़ गूँज रही थी। सभी चौकीदार अपनी-अपनी पोस्ट पर तैनात हो गए थे। एक चौकीदार कस्टम-हाउस के सामने बर्फ पर टहल रहा था और गार्ड-रूम की गर्म आग के पास जाने के लिए बेचैन था।
