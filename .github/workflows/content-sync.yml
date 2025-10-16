@@ -1,9 +1,13 @@
+# .github/workflows/content-sync.yml
+
 name: Smart Content Sync
 
 on:
   push:
     branches: [main]
-    paths: ['content/**/*.md', 'content/**/*.mdx']
+    paths:
+      - 'content/**/*.md'  # match project CONTENT_DIR
+      # - 'content/**/*.mdx'  # uncomment if mdx is supported
 
 permissions:
   contents: read
@@ -28,7 +32,6 @@ jobs:
         run: |
           AUTHORIZED_USERS="${{ secrets.AUTHORIZED_SYNC_USERS }}"
           CURRENT_USER="${{ github.event.head_commit.author.username }}"
-          
           if [[ -z "$AUTHORIZED_USERS" || "$AUTHORIZED_USERS" != *"$CURRENT_USER"* ]]; then
             echo "❌ Unauthorized sync attempt by: $CURRENT_USER"
             exit 1
@@ -41,51 +44,51 @@ jobs:
 
       - name: 🔍 Analyze changes
         id: changes
+        shell: bash
         run: |
           echo "🔍 Analyzing commit: ${{ github.event.head_commit.message }}"
 
-          # Detect file changes
-          CHANGED_FILES=$(git diff -M --name-only --diff-filter=AMR HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
-          REMOVED_FILES=$(git diff -M --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^content/.*\.(md|mdx)$' || true)
-          
-          # Also detect renames specifically
-          RENAMED_FILES=$(git diff -M --name-status HEAD~1 HEAD | grep '^R' | cut -f3 | grep -E '^content/.*\.(md|mdx)$' || true)
-          
-          # Combine all changes
+          # Detect file changes under originals/ (*.md)
+          CHANGED_FILES=$(git diff -M --name-only --diff-filter=AMR HEAD~1 HEAD | grep -E '^originals/.*\.md$' || true)
+          REMOVED_FILES=$(git diff -M --name-only --diff-filter=D HEAD~1 HEAD | grep -E '^originals/.*\.md$' || true)
+
+          # Detect renames (destination path)
+          RENAMED_FILES=$(git diff -M --name-status HEAD~1 HEAD | awk '$1=="R"{print $3}' | grep -E '^originals/.*\.md$' || true)
+
+          # Combine changes
           ALL_CHANGES=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$REMOVED_FILES" "$RENAMED_FILES" | grep -v '^$' | sort -u)
           TOTAL_CHANGES=$(echo "$ALL_CHANGES" | grep -v '^$' | wc -l)
-          
-          # Extract languages dynamically
+
+          # Extract languages dynamically from originals/<lang>/...
           DETECTED_LANGUAGES=""
           VERNACULAR_LANGUAGES=""
-          
           for file in $ALL_CHANGES; do
-            if [[ "$file" =~ ^content/([^/]+)/ ]]; then
+            if [[ "$file" =~ ^originals/([^/]+)/ ]]; then
               LANG="${BASH_REMATCH[1]}"
               if [[ ! "$DETECTED_LANGUAGES" =~ (^|[[:space:]])$LANG($|[[:space:]]) ]]; then
                 DETECTED_LANGUAGES="$DETECTED_LANGUAGES $LANG"
-                [ "$LANG" != "en" ] && VERNACULAR_LANGUAGES="$VERNACULAR_LANGUAGES $LANG"
+                [[ "$LANG" != "en" ]] && VERNACULAR_LANGUAGES="$VERNACULAR_LANGUAGES $LANG"
               fi
             fi
           done
-          
+
           DETECTED_LANGUAGES=$(echo "$DETECTED_LANGUAGES" | xargs)
           VERNACULAR_LANGUAGES=$(echo "$VERNACULAR_LANGUAGES" | xargs)
-          
+
           echo "📊 $TOTAL_CHANGES files | Languages: ${DETECTED_LANGUAGES:-none}"
-          
+
           # Set outputs and environment
           echo "total-changes=$TOTAL_CHANGES" >> $GITHUB_OUTPUT
           echo "detected-languages=$DETECTED_LANGUAGES" >> $GITHUB_OUTPUT
           echo "vernacular-languages=$VERNACULAR_LANGUAGES" >> $GITHUB_OUTPUT
-          
+
           # Set environment variables for the sync script
           {
             echo "CHANGED_FILES<<EOF"
             echo "$CHANGED_FILES"
             echo "EOF"
             echo "REMOVED_FILES<<EOF"
-            echo "$REMOVED_FILES" 
+            echo "$REMOVED_FILES"
             echo "EOF"
             echo "RENAMED_FILES<<EOF"
             echo "$RENAMED_FILES"
@@ -120,12 +123,12 @@ jobs:
         if: steps.changes.outputs.total-changes != '0'
         run: pnpm install --frozen-lockfile --silent
 
-      - name: 🔄 Validate mappings
+      - name: 🔄 Validate mappings (vernacular only)
         if: steps.changes.outputs.total-changes != '0'
+        shell: bash
         run: |
           VERNACULAR_LANGUAGES="${{ steps.changes.outputs.vernacular-languages }}"
           MISSING_FILES=""
-          
           if [ -n "$VERNACULAR_LANGUAGES" ]; then
             for lang in $VERNACULAR_LANGUAGES; do
               for type in author-mappings category-mappings tag-mappings; do
@@ -135,16 +138,14 @@ jobs:
                 fi
               done
             done
-            
             if [ -n "$MISSING_FILES" ]; then
               echo "❌ Missing/invalid mapping files:$MISSING_FILES"
               echo "💡 Create valid JSON mapping files for languages: $VERNACULAR_LANGUAGES"
               exit 1
             fi
-            
             echo "✅ Mappings validated for: $VERNACULAR_LANGUAGES"
           else
-            echo "✅ English-only content, no mappings needed"
+            echo "✅ English-only content, no vernacular mappings needed"
           fi
 
       - name: 🚀 Sync content
@@ -165,20 +166,24 @@ jobs:
         if: always() && steps.changes.outputs.total-changes != '0'
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "## ✅ Sync Completed" >> $GITHUB_STEP_SUMMARY
-            echo "- **Files:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Languages:** ${{ steps.changes.outputs.detected-languages }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Mode:** Dynamic mapping-based" >> $GITHUB_STEP_SUMMARY
+            {
+              echo "## ✅ Sync Completed"
+              echo "- **Files:** ${{ steps.changes.outputs.total-changes }}"
+              echo "- **Languages:** ${{ steps.changes.outputs.detected-languages }}"
+              echo "- **Author:** ${{ github.event.head_commit.author.name }}"
+              echo "- **Mode:** Mapping-based (strict in CI)"
+            } >> $GITHUB_STEP_SUMMARY
           else
-            echo "## ❌ Sync Failed" >> $GITHUB_STEP_SUMMARY
-            echo "- **Files:** ${{ steps.changes.outputs.total-changes }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Languages:** ${{ steps.changes.outputs.detected-languages }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Common fixes:**" >> $GITHUB_STEP_SUMMARY
-            echo "- Missing mappings: \`src/data/{type}.{lang}.json\`" >> $GITHUB_STEP_SUMMARY
-            echo "- Series order: Process covers before episodes" >> $GITHUB_STEP_SUMMARY
-            echo "- Field names: Use \`series_title\`, \`sub_category\`" >> $GITHUB_STEP_SUMMARY
+            {
+              echo "## ❌ Sync Failed"
+              echo "- **Files:** ${{ steps.changes.outputs.total-changes }}"
+              echo "- **Languages:** ${{ steps.changes.outputs.detected-languages }}"
+              echo ""
+              echo "**Common fixes:**"
+              echo "- Missing mappings: \`src/data/{type}.{lang}.json\`"
+              echo "- Series order: Ensure Cover exists and links by local_title"
+              echo "- Field names: Use \`series_title\`, \`sub_category\`, \`short_description\`"
+            } >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: 🐛 Debug info
@@ -190,5 +195,5 @@ jobs:
           echo "Vernacular: ${{ steps.changes.outputs.vernacular-languages }}"
           echo "Author: ${{ github.event.head_commit.author.username }}"
           echo ""
-          echo "Mapping files:"
-          find src/data -name "*-mappings.*.json" 2>/dev/null | head -5 || echo "None found"
+          echo "Mapping files (preview):"
+          find src/data -name "*-mappings.*.json" 2>/dev/null | head -10 || echo "None found"
