@@ -435,8 +435,8 @@ export const series = pgTable(
     title: varchar('title', { length: 255 }).notNull(),
     localTitle: varchar('local_title', { length: 255 }),
     shortDescription: text('short_description'),
-    markdownContent: text('markdown_content').notNull(),
     thumbnailUrl: varchar('thumbnail_url', { length: 500 }),
+    articleType: articleTypes('article_type').default('standard').notNull(),
     totalEpisodes: integer('total_episodes').default(0).notNull(),
     totalWordCount: integer('total_word_count').default(0),
     isPublished: boolean('is_published').default(false).notNull(),
@@ -469,6 +469,7 @@ export const series = pgTable(
     languageIdx: index('series_language_idx').on(t.languageId),
     categoryIdx: index('series_category_idx').on(t.categoryId),
     authorIdx: index('series_author_idx').on(t.authorId),
+    languageLocalTitleIdx: index('series_language_local_title_idx').on(t.languageId, t.localTitle),
   })
 );
 
@@ -615,6 +616,7 @@ export const articles = pgTable(
     categoryIdx: index('articles_category_idx').on(t.categoryId),
     authorIdx: index('articles_author_idx').on(t.authorId),
     seriesEpisodeIdx: index('articles_series_episode_idx').on(t.seriesId, t.episodeNumber),
+    uniqueSeriesEpisode: unique('articles_series_episode_unique').on(t.seriesId, t.episodeNumber),
     typeIdx: index('articles_type_idx').on(t.articleType),
     publishedCategoryIdx: index('articles_published_category_idx').on(t.isPublished, t.categoryId, t.languageId),
   })
